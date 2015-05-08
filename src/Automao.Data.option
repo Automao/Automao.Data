@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<options>
+    <option path="Data">
+        <Oracle Oracle.Type ="Automao.Data.Options.Configuration.DataOptionElement,Automao.Data"
+                ConnectionString="Data Source=PIS;Persist Security Info=True;User ID=pis;Password=Automao;Unicode=True"
+                Provider="System.Data.OracleClient"
+                MappingFileName="automao"
+                WriteSql="false"/>
+        <MySQL MySQL.Type ="Automao.Data.Options.Configuration.DataOptionElement,Automao.Data"
+               ConnectionString="server=automao.cn;user id=root;Password=automao2015;database=automao_schema;persist security info=False"
+               Provider="MySql.Data.MySqlClient"
+               MappingFileName="automao"
+               WriteSql="false"/>
+        <MappingFiles MappingFiles.type="Automao.Data.Options.Configuration.MappingFiles,Automao.Data">
+            <add path="..\..\"/>
+        </MappingFiles>
+    </option>
+</options>

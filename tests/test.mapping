@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<xml>
+	<VehicleBrand Table="VehicleBrand" Assembly="Automao.Common.Models.VehicleBrand,Automao.Common">
+		<BrandId PKColumn="BrandId"/>
+	</VehicleBrand>
+
+	<VehicleSeriesGroup Table="VehicleSeriesGroup" Assembly="Automao.Common.Models.VehicleSeriesGroup,Automao.Common">
+		<BrandId PKColumn="BrandId" Join="VehicleBrand" Set="Brand"/>
+		<GroupId PKColumn="GroupId"/>
+	</VehicleSeriesGroup>
+
+	<VehicleSeries Table="VehicleSeries" Assembly="Automao.Common.Models.VehicleSeries,Automao.Common">
+		<BrandId PKColumn="BrandId"/>
+		<SeriesId PKColumn="SeriesId"/>
+		<GroupId Column="GroupId" Join="VehicleSeriesGroup.GroupId" Set="Group"/>
+	</VehicleSeries>
+
+	<VehicleModel Table="VehicleModel" Assembly="Automao.Common.Models.VehicleModel,Automao.Common">
+		<ModelNo PKColumn="ModelNo"/>
+		<SeriesId Column="SeriesId" Join="VehicleSeries.SeriesId" Set="Series"/>
+	</VehicleModel>
+
+	<Department Table="Department" Assembly="Automao.Common.Models.Department,Automao.Common">
+		<DepartmentId PKColumn="DepartmentId"/>
+		<CorporationId PKColumn="CorporationId"/>
+	</Department>
+</xml>

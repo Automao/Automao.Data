@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<plugin name="Automao.Data"
+				title="Automao.Data Plugin"
+				author="Automao Network Co., Ltd."
+				version="1.0"
+				copyright="Automao @2012"
+				description="Created by: Xing Yu at 2015-05">
+
+	<manifest>
+		<assemblies>
+			<assembly name="Automao.Data" />
+		</assemblies>
+	</manifest>
+
+	<extension path="/Workspace/Services">
+		<!--<object name="Oracle" type="Automao.Data.OracleAccess,Automao.Data"
+						Option="{opt:/Data/Oracle}"
+						MappingFactory="/Workspace/Data/MappingFactory"/>-->
+
+		<object name="MySQL"  type="Automao.Data.MySqlDataAccess,Automao.Data"
+						Option="{opt:/Data/MySQL}"
+						MappingFactory="/Workspace/Data/MappingFactory"/>
+	</extension>
+
+	<extension path="/Workspace/Data">
+		<object name="MappingFactory" type="Automao.Data.Services.MappingFactory,Automao.Data"
+						MappingFiles="{opt:/Data/MappingFiles}"/>
+	</extension>
+
+	<!--选项设置-->
+	<extension path="/Workbench/Options">
+		<option name="Data" title="{res:Data.Title}">
+			<option name="Oracle" title="{res:Data.Oracle.Title}" provider="."/>
+			<option name="MySQL" title="{res:Data.MySQL.Title}" provider="."/>
+			<option name="MappingFiles" title="{res:Data.MappingFiles.Title}" provider="."/>
+		</option>
+	</extension>
+</plugin>
