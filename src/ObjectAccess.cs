@@ -195,9 +195,11 @@ namespace Automao.Data
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
 			var conditionNames = GetConditionName(condition).Where(p => p.IndexOf('.') > 0).ToDictionary(p => p, p => p.Substring(0, p.LastIndexOf('.')));
+			includes = includes == null ? conditionNames.Values.ToArray() : conditionNames.Values.Concat(includes).ToArray();
 
 			Dictionary<string, Tuple<ClassInfo, string>> includeMapping;
-			var joinsql = ParseJoinSql(conditionNames.Values.Concat(includes).ToArray(), info, "T", out includeMapping);
+
+			var joinsql = ParseJoinSql(includes, info, "T", out includeMapping);
 
 			var values = new object[0];
 			var formatStartIndex = 0;
