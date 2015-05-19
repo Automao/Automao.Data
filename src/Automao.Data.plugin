@@ -13,13 +13,9 @@
 	</manifest>
 
 	<extension path="/Workspace/Services">
-		<!--<object name="Oracle" type="Automao.Data.OracleAccess,Automao.Data"
-						Option="{opt:/Data/Oracle}"
-						MappingFactory="/Workspace/Data/MappingFactory"/>-->
-
 		<object name="MySQL"  type="Automao.Data.MySqlDataAccess,Automao.Data"
 						Option="{opt:/Data/MySQL}"
-						MappingFactory="/Workspace/Data/MappingFactory"/>
+						MappingFactory="{path:/Workspace/Data/MappingFactory}"/>
 	</extension>
 
 	<extension path="/Workspace/Data">
