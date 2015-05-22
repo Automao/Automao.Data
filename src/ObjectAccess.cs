@@ -98,17 +98,6 @@ namespace Automao.Data
 
 		#region Base成员
 		#region 查询
-		public IEnumerable<T> Select<T>(string name, ICondition condition = null, Expression<Func<T, object>> includes = null, Expression<Func<T, object>> excludes = null, Paging paging = null, params Sorting[] sorting)
-		{
-			var hashset = new HashSet<string>();
-			hashset.UnionWith(includes.ResolveExpression());
-
-			if (excludes != null)
-				hashset.ExceptWith(excludes.ResolveExpression());
-
-			return Select<T>(name, condition, hashset.ToArray(), paging, sorting);
-		}
-
 		protected override IEnumerable<T> Select<T>(string name, ICondition condition = null, string[] members = null, Paging paging = null, params Sorting[] sorting)
 		{
 			if (string.IsNullOrEmpty(name))

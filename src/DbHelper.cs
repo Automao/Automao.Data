@@ -40,7 +40,6 @@ namespace Automao.Data
     {
         private Options.Configuration.DataOptionElement _option;
         private System.Data.Common.DbProviderFactory _dbProviderFactory;
-        private SqlExecuter _db;
 
         internal static DbHelper GetDBHelper(Options.Configuration.DataOptionElement option)
         {
