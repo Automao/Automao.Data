@@ -79,7 +79,7 @@ namespace Automao.Data
 		{
 			get
 			{
-				if (_mappingInfo == null)
+				if(_mappingInfo == null)
 					_mappingInfo = new MappingInfo(MappingFactory.GetMappingContext(Option.MappingFileName));
 				return _mappingInfo;
 			}
@@ -89,7 +89,7 @@ namespace Automao.Data
 		{
 			get
 			{
-				if (_db == null)
+				if(_db == null)
 					Interlocked.CompareExchange(ref _db, new SqlExecuter(this, Option), null);
 				return _db;
 			}
@@ -100,17 +100,17 @@ namespace Automao.Data
 		#region 查询
 		protected override IEnumerable<T> Select<T>(string name, ICondition condition = null, string[] members = null, Paging paging = null, params Sorting[] sorting)
 		{
-			if (string.IsNullOrEmpty(name))
+			if(string.IsNullOrEmpty(name))
 				name = typeof(T).Name;
 
 			var classInfo = MappingInfo.MappingList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.OrdinalIgnoreCase));
 
 			IEnumerable<string> other;
 			other = GetConditionName(condition);
-			if (sorting != null)
+			if(sorting != null)
 			{
 				var sortFields = string.Join(",", sorting.Select(s => string.Join(",", s.Fields))).Split(',');
-				if (other != null)
+				if(other != null)
 					other = other.Concat(sortFields);
 				else
 					other = sortFields;
@@ -134,23 +134,23 @@ namespace Automao.Data
 
 			var sql = string.Format(format, string.Join(",", parameterDiscription.SelectColumns.Where(p =>
 			{
-				if (p.Value.Item3 != null)
+				if(p.Value.Item3 != null)
 					return !string.IsNullOrEmpty(p.Value.Item3.TableColumnName);//排除列名为空的字段
-				if (p.Value.Item3 == null)
+				if(p.Value.Item3 == null)
 					return !p.Value.Item2.ClassInfo.PropertyInfoList.Where(pp => pp.IsFKColumn).Any(pp => pp.SetClassPropertyName == p.Value.Item1);//排除导航属性
 				return true;
-			}).Select(p => string.Format(columnformat, p.Value.Item2.TableEx, p.Value.Item1))), rootInfo.ClassInfo.TableName, rootInfo.TableEx);
+			}).Select(p => string.Format(columnformat, p.Value.Item2.TableEx, p.Value.Item3 == null ? p.Value.Item1 : p.Value.Item3.TableColumnName))), rootInfo.ClassInfo.TableName, rootInfo.TableEx);
 
-			if (!string.IsNullOrEmpty(join))
+			if(!string.IsNullOrEmpty(join))
 				sql += " " + join;
-			if (!string.IsNullOrEmpty(where))
+			if(!string.IsNullOrEmpty(where))
 				sql += " " + where;
-			if (!string.IsNullOrEmpty(orderby))
+			if(!string.IsNullOrEmpty(orderby))
 				sql += " " + orderby;
 
-			if (paging != null)
+			if(paging != null)
 			{
-				if (paging.PageIndex < 1)
+				if(paging.PageIndex < 1)
 					paging.PageIndex = 1;
 				sql += string.Format(" LIMIT {0},{1}", paging.PageSize * (paging.PageIndex - 1), paging.PageSize);
 			}
@@ -159,16 +159,16 @@ namespace Automao.Data
 
 			var result = SetEntityValue<T>(tablevalues, parameterDiscription);
 
-			if (paging != null && paging.TotalCount == 0)
+			if(paging != null && paging.TotalCount == 0)
 			{
 				format = _caseSensitive ? "select count(0) from \"{0}\" {1}" : "select count(0) from {0} {1}";
 				sql = string.Format(format, rootInfo.ClassInfo.TableName, rootInfo.TableEx);
-				if (!string.IsNullOrEmpty(where))
+				if(!string.IsNullOrEmpty(where))
 					sql += " " + where;
 
 				tablevalues = this.DB.Select(sql, command => SetParameter(command, values.Select(p => new SqlExecuter.Parameter(p)).ToArray()));
 
-				if (tablevalues != null)
+				if(tablevalues != null)
 				{
 					var item = tablevalues.FirstOrDefault();
 					paging.TotalCount = Convert.ToInt32(item.Values.First());
@@ -184,11 +184,11 @@ namespace Automao.Data
 		#region Count
 		protected override int Count(string name, ICondition condition, string[] includes)
 		{
-			if (string.IsNullOrEmpty(name))
+			if(string.IsNullOrEmpty(name))
 				throw new ArgumentNullException("name");
 
 			var info = this.MappingInfo.MappingList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.CurrentCultureIgnoreCase));
-			if (info == null)
+			if(info == null)
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
 			var conditionNames = GetConditionName(condition).Where(p => p.IndexOf('.') > 0).ToDictionary(p => p, p => p.Substring(0, p.LastIndexOf('.')));
@@ -216,14 +216,14 @@ namespace Automao.Data
 		#region 删除
 		protected override int Delete(string name, ICondition condition, string[] cascades)
 		{
-			if (cascades != null && cascades.Length > 0)
+			if(cascades != null && cascades.Length > 0)
 				throw new NotSupportedException();
 
-			if (string.IsNullOrEmpty(name))
+			if(string.IsNullOrEmpty(name))
 				throw new ArgumentNullException("name");
 
 			var info = this.MappingInfo.MappingList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.CurrentCultureIgnoreCase));
-			if (info == null)
+			if(info == null)
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
 			var conditionNames = GetConditionName(condition).Where(p => p.IndexOf('.') > 0).ToDictionary(p => p, p => p.Substring(0, p.LastIndexOf('.')));
@@ -244,14 +244,14 @@ namespace Automao.Data
 		{
 			var classInfo = this.MappingInfo.MappingList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.OrdinalIgnoreCase));
 
-			if (classInfo == null)
+			if(classInfo == null)
 			{
 				outParameters = new Dictionary<string, object>();
 				return null;
 			}
 
 			var procedureInfo = this.MappingInfo.MappingList.FirstOrDefault(p => p.ClassName.Equals(classInfo.TableName, StringComparison.OrdinalIgnoreCase));
-			if (procedureInfo == null)
+			if(procedureInfo == null)
 				procedureInfo = classInfo;
 
 			var outPropertyInfos = procedureInfo.PropertyInfoList.Where(p => p.IsOutPutParamer);
@@ -263,10 +263,10 @@ namespace Automao.Data
 				var dbType = "";
 				bool isInOutPut = false;
 				int? size = null;
-				if (procedureInfo != null)
+				if(procedureInfo != null)
 				{
 					var item = procedureInfo.PropertyInfoList.FirstOrDefault(pp => pp.ClassPropertyName.Equals(p.Key, StringComparison.CurrentCultureIgnoreCase));
-					if (item != null)
+					if(item != null)
 					{
 						parameterName = item.TableColumnName;
 						dbType = item.DbType;
@@ -289,10 +289,10 @@ namespace Automao.Data
 		#region 新增
 		protected override int Insert<T>(string name, IEnumerable<T> entities, string[] includes)
 		{
-			if (!entities.GetEnumerator().MoveNext())
+			if(!entities.GetEnumerator().MoveNext())
 				return 0;
 
-			if (string.IsNullOrEmpty(name))
+			if(string.IsNullOrEmpty(name))
 				name = typeof(T).Name;
 
 			List<string> pkColumnNames = new List<string>();
@@ -302,10 +302,10 @@ namespace Automao.Data
 
 			var insertformat = _caseSensitive ? "INSERT INTO \"{0}\"({1}) VALUES({2})" : "INSERT INTO {0}({1}) VALUES({2})";
 			var columnformat = _caseSensitive ? "\"{0}\"" : "{0}";
-			foreach (var item in entities)
+			foreach(var item in entities)
 			{
 				var dic = GetColumnFromEntity(name, item).Where(p => p.Value != null && includes.Contains(p.Key.ClassPropertyName, StringComparer.OrdinalIgnoreCase)).ToDictionary(p => p.Key, p => p.Value);
-				if (pkColumnNames == null)
+				if(pkColumnNames == null)
 				{
 					pkColumnNames = dic.Where(p => p.Key.IsPKColumn).Select(p => p.Key.TableColumnName).OrderBy(p => p).ToList();
 				}
@@ -321,10 +321,10 @@ namespace Automao.Data
 
 			}
 
-			foreach (var item in sqls)
+			foreach(var item in sqls)
 			{
 				var count = DB.Execute(item.Key, command => SetParameter(command, item.Value));
-				if (count > 0)
+				if(count > 0)
 					insertCount++;
 			}
 
@@ -335,14 +335,14 @@ namespace Automao.Data
 		#region 修改
 		protected override int Update<T>(string name, IEnumerable<T> entities, ICondition condition, string[] members)
 		{
-			if (string.IsNullOrEmpty(name))
+			if(string.IsNullOrEmpty(name))
 				name = typeof(T).Name;
 
-			if (members == null || members.Length == 0)
+			if(members == null || members.Length == 0)
 				throw new ArgumentNullException("members");
 
 			var info = MappingInfo.MappingList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.OrdinalIgnoreCase));
-			if (info == null)
+			if(info == null)
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
 			var sqls = new List<KeyValuePair<string, SqlExecuter.Parameter[]>>();
@@ -352,7 +352,7 @@ namespace Automao.Data
 			var nullcolumnformat = _caseSensitive ? "\"{0}\"=NULL" : "{0}=NULL";
 			var updateformat = _caseSensitive ? "UPDATE \"{0}\" T SET {1} {2}" : "UPDATE {0} T SET {1} {2}";
 
-			foreach (var item in entities)
+			foreach(var item in entities)
 			{
 				var dic = GetColumnFromEntity(name, item, members);
 
@@ -374,7 +374,7 @@ namespace Automao.Data
 
 			var updateCount = 0;
 
-			foreach (var sql in sqls)
+			foreach(var sql in sqls)
 			{
 				updateCount += DB.Execute(sql.Key, command => SetParameter(command, sql.Value));
 			}
@@ -399,7 +399,7 @@ namespace Automao.Data
 		#region 方法
 		internal IEnumerable<T> SetEntityValue<T>(IEnumerable<Dictionary<string, object>> table, SelectMethodMembersParameterDiscription parameterDiscription)
 		{
-			foreach (var row in table)
+			foreach(var row in table)
 			{
 				var info = parameterDiscription.RootInfo;
 				var values = row.Where(p => p.Key.StartsWith(info.TableEx + "_")).ToDictionary(p => p.Key.Substring(info.TableEx.Length + 1), p => p.Value);
@@ -414,15 +414,15 @@ namespace Automao.Data
 
 		private void SetNavigationProperty(Automao.Data.SelectMethodMembersParameterDiscription.Info info, object entity, Dictionary<string, object> values)
 		{
-			if (info.NavigationPropertyInfos != null)
+			if(info.NavigationPropertyInfos != null)
 			{
 				var type = entity.GetType();
-				foreach (var item in info.NavigationPropertyInfos)
+				foreach(var item in info.NavigationPropertyInfos)
 				{
 					var property = type.GetProperty(item.Key);
 
 					var dic = values.Where(p => p.Key.StartsWith(item.Value.TableEx + "_")).ToDictionary(p => p.Key.Substring(item.Value.TableEx.Length + 1), p => p.Value);
-					if (dic == null || dic.Count == 0)
+					if(dic == null || dic.Count == 0)
 						continue;
 
 					var value = CreateEntity<object>(item.Value.ClassInfo.EntityType, dic, item.Value.ClassInfo);
@@ -439,13 +439,13 @@ namespace Automao.Data
 			//获取当前类型公共构造函数中参数最少的构造函数的参数集合
 			var cpinfo = entityType.GetConstructors().Where(p => p.IsPublic).Select(p => p.GetParameters()).OrderBy(p => p.Length).FirstOrDefault();
 			var instanceArgs = new object[cpinfo.Length];
-			if (info != null)
+			if(info != null)
 			{
 				info.PropertyInfoList.Where(p => p.PassedIntoConstructor).ToList().ForEach(p =>
 				{
 					var tempValue = propertyValues.FirstOrDefault(pp => pp.Key.Equals(p.TableColumnName, StringComparison.OrdinalIgnoreCase));
 					var args = cpinfo == null ? null : cpinfo.FirstOrDefault(pp => pp.Name == p.ConstructorName);
-					if (args != null)
+					if(args != null)
 						instanceArgs[args.Position] = Zongsoft.Common.Convert.ConvertValue(tempValue.Value, args.ParameterType);
 				});
 			}
@@ -453,29 +453,29 @@ namespace Automao.Data
 			T entity = default(T);
 			var properties = entityType.GetProperties();
 
-			foreach (var property in properties.OrderBy(p => p.Name))
+			foreach(var property in properties.OrderBy(p => p.Name))
 			{
-				if (!property.CanWrite)
+				if(!property.CanWrite)
 					continue;
 				var isClass = property.PropertyType.IsClass && property.PropertyType != typeof(string) && !property.PropertyType.IsArray;
-				if (isClass)
+				if(isClass)
 					continue;
 
 				var propertyInfo = info == null ? null : info.PropertyInfoList.FirstOrDefault(p => p.ClassPropertyName.Equals(property.Name, StringComparison.CurrentCultureIgnoreCase));
-				if (propertyInfo != null && string.IsNullOrEmpty(propertyInfo.TableColumnName))
+				if(propertyInfo != null && string.IsNullOrEmpty(propertyInfo.TableColumnName))
 					continue;
 
 				var tempValue = propertyValues.FirstOrDefault(p => p.Key.Equals(propertyInfo != null ? propertyInfo.TableColumnName : property.Name, StringComparison.OrdinalIgnoreCase));
-				if (tempValue.Value == null || tempValue.Value is System.DBNull)
+				if(tempValue.Value == null || tempValue.Value is System.DBNull)
 					continue;
 
 				var propertyValue = Zongsoft.Common.Convert.ConvertValue(tempValue.Value, property.PropertyType);
-				if (propertyValue == null)
+				if(propertyValue == null)
 					continue;
 
-				if (entity == null)
+				if(entity == null)
 				{
-					if (instanceArgs.Length == 0 && typeof(T) != typeof(object))
+					if(instanceArgs.Length == 0 && typeof(T) != typeof(object))
 						entity = Activator.CreateInstance<T>();
 					else
 						entity = (T)Activator.CreateInstance(entityType, instanceArgs);
@@ -492,7 +492,7 @@ namespace Automao.Data
 
 			IDictionary<string, object> properties;
 
-			if (entity is IDictionary<string, object>)
+			if(entity is IDictionary<string, object>)
 				properties = (IDictionary<string, object>)entity;
 			else
 			{
@@ -502,7 +502,7 @@ namespace Automao.Data
 
 			var list = properties.Where(p => members == null || members.Contains(p.Key, StringComparer.OrdinalIgnoreCase));
 
-			if (info == null)
+			if(info == null)
 			{
 				return list.ToDictionary(p => new ClassPropertyInfo
 				{
@@ -514,7 +514,7 @@ namespace Automao.Data
 			return list.Select(p =>
 			{
 				var item = info.PropertyInfoList.FirstOrDefault(pp => pp.ClassPropertyName.Equals(p.Key, StringComparison.CurrentCultureIgnoreCase));
-				if (item != null && string.IsNullOrEmpty(item.TableColumnName))
+				if(item != null && string.IsNullOrEmpty(item.TableColumnName))
 					return null;
 				return new
 				{
@@ -536,15 +536,15 @@ namespace Automao.Data
 		#region 私有方法
 		private string[] GetConditionName(ICondition condition)
 		{
-			if (condition == null)
+			if(condition == null)
 				return null;
 
-			if (condition is Condition)
+			if(condition is Condition)
 				return new[] { ((Condition)condition).Name };
 			else
 			{
 				var list = new List<string>();
-				foreach (var item in (ConditionCollection)condition)
+				foreach(var item in (ConditionCollection)condition)
 				{
 					list.AddRange(GetConditionName(item));
 				}
@@ -565,7 +565,7 @@ namespace Automao.Data
 		{
 			var index = include.LastIndexOf('.');
 
-			if (cache.ContainsKey(include))
+			if(cache.ContainsKey(include))
 				return null;
 
 			ClassPropertyInfo[] pis;
@@ -573,7 +573,7 @@ namespace Automao.Data
 			var joinformat = _caseSensitive ? "{0} JOIN \"{1}\" {2} ON {3}" : "{0} JOIN {1} {2} ON {3}";
 			var onformat = _caseSensitive ? "{0}.\"{1}\"={2}.\"{3}\"" : "{0}.{1}={2}.{3}";
 
-			if (index < 0)
+			if(index < 0)
 			{
 				pis = info.PropertyInfoList.Where(p => p.IsFKColumn && p.SetClassPropertyName.Equals(include, StringComparison.OrdinalIgnoreCase)).ToArray();
 				value = new Tuple<ClassInfo, string>(pis[0].Join, "J" + cache.Count);
@@ -584,7 +584,7 @@ namespace Automao.Data
 			}
 			var key = include.Substring(0, index);
 			string result = "";
-			if (!cache.ContainsKey(key))
+			if(!cache.ContainsKey(key))
 				result = ParseJoinSql(key, info, tableEx, cache);
 
 			var tuple = cache[key];
