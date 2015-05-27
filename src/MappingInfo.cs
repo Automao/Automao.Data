@@ -68,11 +68,13 @@ namespace Automao.Data
 						info.IsProcedure = true;
 					}
 					else
-						continue;
+						info.TableName = info.ClassName;
+
 					if(element.Attribute("Assembly") != null && !string.IsNullOrEmpty(element.Attribute("Assembly").Value))
 						info.Assembly = element.Attribute("Assembly").Value;
 					else
 						info.Assembly = "System.Object,mscorlib";
+
 					info.PropertyInfoList = new List<ClassPropertyInfo>();
 					foreach(var property in element.Elements())
 					{
