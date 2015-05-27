@@ -129,24 +129,18 @@ namespace Automao.Data
 			var orderby = sorting == null || sorting.Length == 0 ? "" : string.Format("ORDER BY {0}", string.Join(",", sorting.Select(p => p.Parse(parameterDiscription, _caseSensitive))));
 			var rootInfo = parameterDiscription.RootInfo;
 
-			var format = _caseSensitive ? "SELECT {0} FROM \"{1}\" {2}" : "SELECT {0} FROM {1} {2}";
 			var columnformat = _caseSensitive ? "{0}.\"{1}\" \"{0}_{1}\"" : "{0}.{1} {0}_{1}";
 
-			var sql = string.Format(format, string.Join(",", parameterDiscription.SelectColumns.Where(p =>
+			var columns = string.Join(",", parameterDiscription.SelectColumns.Where(p =>
 			{
 				if(p.Value.Item3 != null)
 					return !string.IsNullOrEmpty(p.Value.Item3.TableColumnName);//排除列名为空的字段
 				if(p.Value.Item3 == null)
 					return !p.Value.Item2.ClassInfo.PropertyInfoList.Where(pp => pp.IsFKColumn).Any(pp => pp.SetClassPropertyName == p.Value.Item1);//排除导航属性
 				return true;
-			}).Select(p => string.Format(columnformat, p.Value.Item2.TableEx, p.Value.Item3 == null ? p.Value.Item1 : p.Value.Item3.TableColumnName))), rootInfo.ClassInfo.TableName, rootInfo.TableEx);
+			}).Select(p => string.Format(columnformat, p.Value.Item2.TableEx, p.Value.Item3 == null ? p.Value.Item1 : p.Value.Item3.TableColumnName)));
 
-			if(!string.IsNullOrEmpty(join))
-				sql += " " + join;
-			if(!string.IsNullOrEmpty(where))
-				sql += " " + where;
-			if(!string.IsNullOrEmpty(orderby))
-				sql += " " + orderby;
+			var sql = CreateSelectSql(rootInfo.ClassInfo.TableName, rootInfo.TableEx, columns, where, join, orderby, paging);
 
 			if(paging != null)
 			{
@@ -161,10 +155,7 @@ namespace Automao.Data
 
 			if(paging != null && paging.TotalCount == 0)
 			{
-				format = _caseSensitive ? "select count(0) from \"{0}\" {1}" : "select count(0) from {0} {1}";
-				sql = string.Format(format, rootInfo.ClassInfo.TableName, rootInfo.TableEx);
-				if(!string.IsNullOrEmpty(where))
-					sql += " " + where;
+				sql = CreateSelectSql(rootInfo.ClassInfo.TableName, rootInfo.TableEx, "count(0)", where, join, null, null);
 
 				tablevalues = this.DB.Select(sql, command => SetParameter(command, values.Select(p => new SqlExecuter.Parameter(p)).ToArray()));
 
@@ -178,7 +169,7 @@ namespace Automao.Data
 			return result;
 		}
 
-		protected abstract string CreateSelectSql(string tableName, string columns, string where, string join, string orderby, Paging paging);
+		protected abstract string CreateSelectSql(string tableName, string tableNameEx, string columns, string where, string join, string orderby, Paging paging);
 		#endregion
 
 		#region Count
