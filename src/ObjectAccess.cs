@@ -142,13 +142,6 @@ namespace Automao.Data
 
 			var sql = CreateSelectSql(rootInfo.ClassInfo.TableName, rootInfo.TableEx, columns, where, join, orderby, paging);
 
-			if(paging != null)
-			{
-				if(paging.PageIndex < 1)
-					paging.PageIndex = 1;
-				sql += string.Format(" LIMIT {0},{1}", paging.PageSize * (paging.PageIndex - 1), paging.PageSize);
-			}
-
 			var tablevalues = this.DB.Select(sql, command => SetParameter(command, values.Select(p => new SqlExecuter.Parameter(p)).ToArray()));
 
 			var result = SetEntityValue<T>(tablevalues, parameterDiscription);
@@ -442,6 +435,15 @@ namespace Automao.Data
 			}
 
 			T entity = default(T);
+
+			if(entity == null)
+			{
+				if(instanceArgs.Length == 0 && typeof(T) != typeof(object))
+					entity = Activator.CreateInstance<T>();
+				else
+					entity = (T)Activator.CreateInstance(entityType, instanceArgs);
+			}
+
 			var properties = entityType.GetProperties();
 
 			foreach(var property in properties.OrderBy(p => p.Name))
@@ -463,14 +465,6 @@ namespace Automao.Data
 				var propertyValue = Zongsoft.Common.Convert.ConvertValue(tempValue.Value, property.PropertyType);
 				if(propertyValue == null)
 					continue;
-
-				if(entity == null)
-				{
-					if(instanceArgs.Length == 0 && typeof(T) != typeof(object))
-						entity = Activator.CreateInstance<T>();
-					else
-						entity = (T)Activator.CreateInstance(entityType, instanceArgs);
-				}
 
 				property.SetValue(entity, propertyValue, null);
 			}
