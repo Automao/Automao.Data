@@ -130,6 +130,7 @@ namespace Automao.Data
 						if(string.IsNullOrEmpty(propertyInfo.TableColumnName))
 							propertyInfo.TableColumnName = propertyInfo.ClassPropertyName;
 
+						propertyInfo.Host = info;
 						info.PropertyInfoList.Add(propertyInfo);
 					}
 					_mappingList.Add(info);
@@ -266,6 +267,12 @@ namespace Automao.Data
 	/// </summary>
 	public class ClassPropertyInfo
 	{
+		public ClassInfo Host
+		{
+			get;
+			set;
+		}
+
 		/// <summary>
 		/// 类中属性名称
 		/// </summary>

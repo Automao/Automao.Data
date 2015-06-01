@@ -60,15 +60,35 @@ namespace Automao.Data
 		#endregion
 
 		#region 重写方法
-		protected override string CreateSelectSql(string tableName, string tableNameEx, string columns, string where, string join, string orderby, Paging paging)
+		protected override string CreateSelectSql(string tableName, string tableNameEx, string newTableNameEx, string columns, string where, string join, string group, string having, string groupedSelectColumns, string groupedJoin, string orderby, Paging paging)
 		{
 			var sql = string.Format("SELECT {0} FROM {1} {2}", columns, tableName, tableNameEx);
 			if(!string.IsNullOrEmpty(join))
 				sql += " " + join;
 			if(!string.IsNullOrEmpty(where))
 				sql += " " + where;
+
+			if(!string.IsNullOrEmpty(group))
+				sql += " " + group;
+
+			if(!string.IsNullOrEmpty(having))
+				sql += " " + having;
+
+			if(!string.IsNullOrEmpty(groupedSelectColumns))
+			{
+				var newColumns = groupedSelectColumns.Replace(tableNameEx + ".", newTableNameEx + ".").Replace(tableNameEx + "_", newTableNameEx + "_");
+				sql = string.Format("select {0} {1} from ({2}) {3}", newColumns.Equals("count(0)", StringComparison.OrdinalIgnoreCase) ? "" : string.Format("{0}.*,", newTableNameEx), newColumns, sql, newTableNameEx);
+				if(!string.IsNullOrEmpty(groupedJoin))
+					sql += " " + groupedJoin;
+			}
+
 			if(!string.IsNullOrEmpty(orderby))
-				sql += " " + orderby;
+			{
+				if(!string.IsNullOrEmpty(groupedSelectColumns))
+					sql += " " + orderby.Replace(tableNameEx + ".", newTableNameEx + ".").Replace(tableNameEx + "_", newTableNameEx + "_");
+				else
+					sql += " " + orderby;
+			}
 
 			if(paging != null)
 			{

@@ -98,57 +98,151 @@ namespace Automao.Data
 
 		#region Base成员
 		#region 查询
-		protected override IEnumerable<T> Select<T>(string name, ICondition condition = null, string[] members = null, Paging paging = null, params Sorting[] sorting)
+		protected override IEnumerable<T> Select<T>(string name, ICondition condition, string[] members, Paging paging, Grouping grouping, Sorting[] sorting)
 		{
 			if(string.IsNullOrEmpty(name))
 				name = typeof(T).Name;
 
 			var classInfo = MappingInfo.MappingList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.OrdinalIgnoreCase));
+			if(classInfo == null)
+				throw new Exception(string.Format("未找到{0}对应的mapping节点", name));
 
-			IEnumerable<string> other;
-			other = GetConditionName(condition);
-			if(sorting != null)
+			#region 构建所有列
+			var joinInfos = new Dictionary<string, JoinInfo>();
+			var allColumnInfos = new Dictionary<string, ColumnInfo>();
+			var selectColumnInfos = new Dictionary<string, ColumnInfo>();
+			var rootJoin = new JoinInfo(null, "", "T", classInfo, null);
+
+			var conditionNames = GetConditionName(condition) ?? new string[0];
+			IEnumerable<string> allColumns = conditionNames;
+
+			if(grouping != null)
 			{
-				var sortFields = string.Join(",", sorting.Select(s => string.Join(",", s.Fields))).Split(',');
-				if(other != null)
-					other = other.Concat(sortFields);
-				else
-					other = sortFields;
+				allColumns = allColumns.Concat(grouping.Members);
+				if(grouping.Condition != null)
+					allColumns = allColumns.Concat(GetConditionName(grouping.Condition));
 			}
 
-			var parameterDiscription = new SelectMethodMembersParameterDiscription(classInfo, members, other);
-			return Select<T>(condition, parameterDiscription, paging, sorting);
-		}
+			if(sorting != null)
+			{
+				foreach(var item in sorting)
+				{
+					allColumns = allColumns.Concat(item.Members);
+				}
+			}
 
-		private IEnumerable<T> Select<T>(ICondition condition, SelectMethodMembersParameterDiscription parameterDiscription, Paging paging, Sorting[] sorting)
-		{
+			allColumns = allColumns.Concat(members);
+
+
+			foreach(var item in allColumns)
+			{
+				if(allColumnInfos.ContainsKey(item))
+					continue;
+
+				var columnInfo = new ColumnInfo(item, classInfo, joinInfos, rootJoin);
+				allColumnInfos.Add(item, columnInfo);
+			}
+			#endregion
+
+			Func<ColumnInfo, bool> predicate = (p =>
+			{
+				var columnInfo = p;
+				if(columnInfo.PropertyInfo != null)
+					return !string.IsNullOrEmpty(columnInfo.PropertyInfo.TableColumnName);//排除列名为空的字段
+				return !columnInfo.ClassInfo.PropertyInfoList.Where(pp => pp.IsFKColumn).Any(pp => pp.SetClassPropertyName == columnInfo.Field);//排除导航属性
+			});
+
+			#region 要查询的列
+			var selectMembers = members.Where(p => grouping == null || p.Contains('(') && !grouping.Members.Contains(p));
+			if(grouping != null)
+				selectMembers = selectMembers.Concat(grouping.Members);
+
+			var columns = string.Join(",", selectMembers.Select(p => allColumnInfos[p]).Where(predicate).Select(p => p.ToSelectColumn(_caseSensitive)));
+			#endregion
+
+			#region where
 			int startFormatIndex = 0;
 			object[] values;
-			var where = "WHERE {0}".FormatWhere(condition, parameterDiscription, _caseSensitive, ref startFormatIndex, out values);
-			var join = parameterDiscription.GetJoinSql(_caseSensitive);
-			var orderby = sorting == null || sorting.Length == 0 ? "" : string.Format("ORDER BY {0}", string.Join(",", sorting.Select(p => p.Parse(parameterDiscription, _caseSensitive))));
-			var rootInfo = parameterDiscription.RootInfo;
+			var where = "WHERE {0}".FormatWhere(condition, allColumnInfos, _caseSensitive, ref startFormatIndex, out values);
+			#endregion
 
-			var columnformat = _caseSensitive ? "{0}.\"{1}\" \"{0}_{1}\"" : "{0}.{1} {0}_{1}";
-
-			var columns = string.Join(",", parameterDiscription.SelectColumns.Where(p =>
+			#region join
+			var tempJoinInfos = new List<JoinInfo>();
+			var tempList = conditionNames.Concat(selectMembers);
+			if(grouping != null && grouping.Condition != null)
+				tempList = tempList.Concat(GetConditionName(grouping.Condition));
+			foreach(var item in tempList.ToArray())
 			{
-				if(p.Value.Item3 != null)
-					return !string.IsNullOrEmpty(p.Value.Item3.TableColumnName);//排除列名为空的字段
-				if(p.Value.Item3 == null)
-					return !p.Value.Item2.ClassInfo.PropertyInfoList.Where(pp => pp.IsFKColumn).Any(pp => pp.SetClassPropertyName == p.Value.Item1);//排除导航属性
-				return true;
-			}).Select(p => string.Format(columnformat, p.Value.Item2.TableEx, p.Value.Item3 == null ? p.Value.Item1 : p.Value.Item3.TableColumnName)));
+				var columnInfo = allColumnInfos[item];
+				if(columnInfo.JoinInfo != rootJoin && !tempJoinInfos.Contains(columnInfo.JoinInfo))
+				{
+					tempJoinInfos.Add(columnInfo.JoinInfo);
+					columnInfo.JoinInfo.GetParent(tempJoinInfos, p => p == rootJoin);
+				}
+			}
+			var join = string.Join(" ", tempJoinInfos.OrderBy(p => p.TableEx).Select(p => p.ToJoinSql(_caseSensitive)));
+			#endregion
 
-			var sql = CreateSelectSql(rootInfo.ClassInfo.TableName, rootInfo.TableEx, columns, where, join, orderby, paging);
+			#region grouping
+			string having = string.Empty;
+			string group = string.Empty;
+			string groupedSelectColumns = string.Empty;
+			string groupedJoin = string.Empty;
+			string newTableNameEx = rootJoin.TableEx + '1';
+			if(grouping != null)
+			{
+				var groupColumnInfos = grouping.Members.Select(p => allColumnInfos[p]).ToArray();
+				group = string.Format("GROUP BY {0}", string.Join(",", groupColumnInfos.Select(p => p.ToColumn(_caseSensitive))));
+
+				var groupedSelectMembers = members.Where(p => !p.Contains('(') && !grouping.Members.Contains(p));
+				groupedSelectColumns = string.Join(",", groupedSelectMembers.Select(p => allColumnInfos[p]).Where(predicate).Select(p => p.ToSelectColumn(_caseSensitive)));
+
+				tempJoinInfos = new List<JoinInfo>();
+				foreach(var item in groupedSelectMembers)
+				{
+					var columnInfo = allColumnInfos[item];
+					if(columnInfo.JoinInfo != rootJoin && !tempJoinInfos.Contains(columnInfo.JoinInfo))
+					{
+						tempJoinInfos.Add(columnInfo.JoinInfo);
+						columnInfo.JoinInfo.GetParent(tempJoinInfos, p => groupColumnInfos.Any(pp => pp.JoinInfo == p));
+					}
+				}
+
+				groupedJoin = string.Join(" ", tempJoinInfos.OrderBy(p => p.TableEx).Select(p =>
+				{
+					var groupColumnInfo = groupColumnInfos.Where(gc => gc.JoinInfo == p.Parent).ToArray();
+					if(groupColumnInfo.Any())
+					{
+						var dic = p.ParentJoinColumn.ToDictionary(c => groupColumnInfo.FirstOrDefault(gc => gc.Field == c.ClassPropertyName).GetColumnEx(_caseSensitive),
+							c => c.TableColumnName);
+
+						return JoinInfo.CreatJoinSql(_caseSensitive, p.Parent.ParentJoinColumn.Any(c => c.Nullable), p.ClassInfo.TableName, p.TableEx, newTableNameEx, dic);
+					}
+					return p.ToJoinSql(_caseSensitive);
+				}));
+
+				if(grouping.Condition != null)
+				{
+					object[] tempValues;
+					having = "HAVING {0}".FormatWhere(grouping.Condition, allColumnInfos, _caseSensitive, ref startFormatIndex, out tempValues);
+					values = values.Concat(tempValues).ToArray();
+				}
+			}
+			#endregion
+
+			var orderby = sorting == null || sorting.Length == 0 ? "" : string.Format("ORDER BY {0}", string.Join(",", sorting.Select(p => p.Parse(allColumnInfos, _caseSensitive))));
+
+			var sql = CreateSelectSql(classInfo.TableName, rootJoin.TableEx, newTableNameEx, columns, where, join,
+				group, having, groupedSelectColumns, groupedJoin, orderby, paging);
 
 			var tablevalues = this.DB.Select(sql, command => SetParameter(command, values.Select(p => new SqlExecuter.Parameter(p)).ToArray()));
 
-			var result = SetEntityValue<T>(tablevalues, parameterDiscription);
+			var result = SetEntityValue<T>(tablevalues, rootJoin);
 
 			if(paging != null && paging.TotalCount == 0)
 			{
-				sql = CreateSelectSql(rootInfo.ClassInfo.TableName, rootInfo.TableEx, "count(0)", where, join, null, null);
+				sql = CreateSelectSql(classInfo.TableName, rootJoin.TableEx, newTableNameEx, grouping == null ? "COUNT(0)" : columns, where, join,
+					group, having, grouping == null ? null : "COUNT(0)", groupedJoin, null, null);
 
 				tablevalues = this.DB.Select(sql, command => SetParameter(command, values.Select(p => new SqlExecuter.Parameter(p)).ToArray()));
 
@@ -162,7 +256,7 @@ namespace Automao.Data
 			return result;
 		}
 
-		protected abstract string CreateSelectSql(string tableName, string tableNameEx, string columns, string where, string join, string orderby, Paging paging);
+		protected abstract string CreateSelectSql(string tableName, string tableNameEx, string newTableNameEx, string columns, string where, string join, string group, string having, string groupedSelectColumns, string groupedJoin, string orderby, Paging paging);
 		#endregion
 
 		#region Count
@@ -381,37 +475,36 @@ namespace Automao.Data
 		#endregion
 
 		#region 方法
-		internal IEnumerable<T> SetEntityValue<T>(IEnumerable<Dictionary<string, object>> table, SelectMethodMembersParameterDiscription parameterDiscription)
+		internal IEnumerable<T> SetEntityValue<T>(IEnumerable<Dictionary<string, object>> table, JoinInfo rootInfo)
 		{
 			foreach(var row in table)
 			{
-				var info = parameterDiscription.RootInfo;
-				var values = row.Where(p => p.Key.StartsWith(info.TableEx + "_")).ToDictionary(p => p.Key.Substring(info.TableEx.Length + 1), p => p.Value);
-				var entityType = info.ClassInfo.EntityType;
-				var entity = CreateEntity<T>(entityType, values, info.ClassInfo);
+				var values = row.Where(p => p.Key.StartsWith(rootInfo.TableEx + "_")).ToDictionary(p => p.Key.Substring(rootInfo.TableEx.Length + 1), p => p.Value);
+				var entityType = rootInfo.ClassInfo.EntityType;
+				var entity = CreateEntity<T>(entityType, values, rootInfo.ClassInfo);
 
-				SetNavigationProperty(info, entity, row);
+				SetNavigationProperty(rootInfo, entity, row);
 
 				yield return entity;
 			}
 		}
 
-		private void SetNavigationProperty(Automao.Data.SelectMethodMembersParameterDiscription.Info info, object entity, Dictionary<string, object> values)
+		private void SetNavigationProperty(JoinInfo joinInfo, object entity, Dictionary<string, object> values)
 		{
-			if(info.NavigationPropertyInfos != null)
+			if(joinInfo.Children != null)
 			{
 				var type = entity.GetType();
-				foreach(var item in info.NavigationPropertyInfos)
+				foreach(var item in joinInfo.Children)
 				{
-					var property = type.GetProperty(item.Key);
+					var property = type.GetProperty(item.Property);
 
-					var dic = values.Where(p => p.Key.StartsWith(item.Value.TableEx + "_")).ToDictionary(p => p.Key.Substring(item.Value.TableEx.Length + 1), p => p.Value);
+					var dic = values.Where(p => p.Key.StartsWith(item.TableEx + "_")).ToDictionary(p => p.Key.Substring(item.TableEx.Length + 1), p => p.Value);
 					if(dic == null || dic.Count == 0)
 						continue;
 
-					var value = CreateEntity<object>(item.Value.ClassInfo.EntityType, dic, item.Value.ClassInfo);
+					var value = CreateEntity<object>(item.ClassInfo.EntityType, dic, item.ClassInfo);
 
-					SetNavigationProperty(item.Value, value, values);
+					SetNavigationProperty(item, value, values);
 
 					property.SetValue(entity, value);
 				}

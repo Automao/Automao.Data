@@ -41,6 +41,8 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ColumnInfo.cs" />
+    <Compile Include="JoinInfo.cs" />
     <Compile Include="MySqlDataAccess.cs" />
     <Compile Include="SqlExecuter.cs" />
     <Compile Include="DbHelper.cs" />
@@ -52,7 +54,6 @@
     <Compile Include="Options\Configuration\MappingFile.cs" />
     <Compile Include="Options\Configuration\MappingFiles.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="SelectMethodMembersParameterDiscription.cs" />
     <Compile Include="Services\IMappingFactory.cs" />
     <Compile Include="Services\MappingFactory.cs" />
   </ItemGroup>

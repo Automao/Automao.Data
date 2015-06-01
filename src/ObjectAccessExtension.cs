@@ -35,13 +35,13 @@ namespace Automao.Data
 {
 	public static class ObjectAccessExtension
 	{
-		internal static string FormatWhere(this string format, ICondition clause, SelectMethodMembersParameterDiscription parameterDiscription, bool caseSensitive, ref int startFormatIndex, out object[] values)
+		internal static string FormatWhere(this string format, ICondition clause, Dictionary<string, ColumnInfo> columnInfos, bool caseSensitive, ref int startFormatIndex, out object[] values)
 		{
 			values = new object[0];
 			if(clause == null)
 				return "";
 
-			var where = clause.Resolve(parameterDiscription, caseSensitive, ref startFormatIndex, out values);
+			var where = clause.Resolve(columnInfos, caseSensitive, ref startFormatIndex, out values);
 
 			if(string.IsNullOrEmpty(where))
 				return "";
@@ -69,7 +69,7 @@ namespace Automao.Data
 			return string.Format(format, where);
 		}
 
-		internal static string Resolve(this ICondition condition, SelectMethodMembersParameterDiscription parameterDiscription, bool caseSensitive, ref int startFormatIndex, out object[] values)
+		internal static string Resolve(this ICondition condition, Dictionary<string, ColumnInfo> columnInfos, bool caseSensitive, ref int startFormatIndex, out object[] values)
 		{
 			if(condition is Condition)
 			{
@@ -81,27 +81,20 @@ namespace Automao.Data
 				else
 					values = new[] { where.Value };
 
-				if(!parameterDiscription.OtherColumns.ContainsKey(where.Name))
+				if(!columnInfos.ContainsKey(where.Name))
 					throw new Exception(string.Format("未找到属性\"{0}\"的描述信息", where.Name));
 
-				var columnDiscription = parameterDiscription.OtherColumns[where.Name];
-				var info = columnDiscription.Item2;
-				var pi = columnDiscription.Item3;
+				var columnInfo = columnInfos[where.Name];
+				var pi = columnInfo.PropertyInfo;
 
 				var oper = where.Operator.Parse(values, ref startFormatIndex);
 
-				var columnName = pi == null ? where.Name.Substring(where.Name.LastIndexOf('.') + 1) : pi.TableColumnName;
+				var columnName = pi == null ? columnInfo.Field : pi.TableColumnName;
 
 				if(string.IsNullOrEmpty(oper))
-				{
-					var format = caseSensitive ? "{0}.\"{1}\" !={0}.\"{1}\"" : "{0}.{1} !={0}.{1}";
-					return string.Format(format, info.TableEx, columnName);
-				}
+					return string.Format("{0} != {0}", columnInfo.ToColumn(caseSensitive));
 				else
-				{
-					var format = caseSensitive ? "{0}.\"{1}\" {2}" : "{0}.{1} {2}";
-					return string.Format(format, info.TableEx, columnName, oper);
-				}
+					return string.Format("{0} {1}", columnInfo.ToColumn(caseSensitive), oper);
 			}
 			else if(condition is ConditionCollection)
 			{
@@ -111,7 +104,7 @@ namespace Automao.Data
 
 				foreach(var item in where)
 				{
-					var result = item.Resolve(parameterDiscription, caseSensitive, ref startFormatIndex, out values);
+					var result = item.Resolve(columnInfos, caseSensitive, ref startFormatIndex, out values);
 					if(string.IsNullOrEmpty(result))
 						continue;
 
@@ -217,7 +210,7 @@ namespace Automao.Data
 				case ConditionOperator.Like:
 					{
 						if(values == null || values.Length == 0)
-							return "is null";
+							return "IS NULL";
 						return string.Format("{0} {{{1}}}", values[0] is string && ((string)values[0]).IndexOfAny("_%".ToArray()) >= 0 ? "LIKE" : "=", formatIndex++);
 					}
 				case ConditionOperator.GreaterThan:
@@ -248,7 +241,12 @@ namespace Automao.Data
 				case ConditionOperator.LessThanEqual:
 					return string.Format("<= {{{0}}}", formatIndex++);
 				case ConditionOperator.NotEqual:
-					return string.Format("!= {{{0}}}", formatIndex++);
+					{
+						if(values == null || values.Length == 0)
+							return "IS NOT NULL";
+
+						return string.Format("!= {{{0}}}", formatIndex++);
+					}
 				default:
 					throw new ArgumentOutOfRangeException("未知的clauseOperator");
 			}
@@ -284,29 +282,28 @@ namespace Automao.Data
 				tableEx += ".";
 
 			var sort = sorting.Mode.Parse();
-			return string.Join(",", sorting.Fields.Select(p =>
+			return string.Join(",", sorting.Members.Select(p =>
 			{
 				var pi = info.PropertyInfoList.FirstOrDefault(i => i.ClassPropertyName == p);
 				return string.Format("{0}\"{1}\" {2}", tableEx, pi == null ? p : pi.TableColumnName, sort);
 			}));
 		}
 
-		internal static string Parse(this Sorting sorting, SelectMethodMembersParameterDiscription parameterDiscription, bool caseSensitive)
+		internal static string Parse(this Sorting sorting, Dictionary<string, ColumnInfo> columnInfos, bool caseSensitive)
 		{
 			var sort = sorting.Mode.Parse();
 			var format = caseSensitive ? "{0}.\"{1}\" {2}" : "{0}.{1} {2}";
 
-			return string.Join(",", sorting.Fields.Select(p =>
+			return string.Join(",", sorting.Members.Select(p =>
 			{
 
-				if(!parameterDiscription.OtherColumns.ContainsKey(p))
+				if(!columnInfos.ContainsKey(p))
 					throw new Exception(string.Format("未找到属性\"{0}\"的描述信息", p));
 
-				var columnDiscription = parameterDiscription.OtherColumns[p];
-				var info = columnDiscription.Item2;
-				var pi = columnDiscription.Item3;
+				var columnInfo = columnInfos[p];
+				var pi = columnInfo.PropertyInfo;
 
-				return string.Format(format, info.TableEx, pi == null ? p.Substring(p.LastIndexOf('.') + 1) : pi.TableColumnName, sort);
+				return string.Format(format, columnInfo.JoinInfo.TableEx, pi == null ? columnInfo.Field : pi.TableColumnName, sort);
 			}));
 		}
 
@@ -338,7 +335,7 @@ namespace Automao.Data
 					{
 						str = string.Format("{0}\"{1}\" >= {{{2}}}", tableEx, p.Key, list.Count + index);
 						list.Add(dts[0]);
-						and = " and ";
+						and = " AND ";
 					}
 					if(dts[1].HasValue)
 					{
