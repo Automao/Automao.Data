@@ -142,6 +142,9 @@ namespace Automao.Data
 				return list.ToArray();
 			}
 
+			if(expression.NodeType == ExpressionType.Convert && expression.Type == typeof(object))
+				return ResolveExpression(((UnaryExpression)expression).Operand, parameter);
+
 			throw new NotSupportedException();
 		}
 
