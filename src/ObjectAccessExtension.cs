@@ -78,6 +78,12 @@ namespace Automao.Data
 					values = new object[0];
 				else if(where.Value is object[])
 					values = (object[])where.Value;
+				else if(where.Value is Array)
+				{
+					var array = (Array)where.Value;
+					values = new object[array.Length];
+					array.CopyTo(values, 0);
+				}
 				else
 					values = new[] { where.Value };
 
@@ -108,6 +114,9 @@ namespace Automao.Data
 					if(string.IsNullOrEmpty(result))
 						continue;
 
+					if(item is ConditionCollection)
+						result = string.Format("({0})", result);
+
 					sqls.Add(result);
 					vs.AddRange(values);
 				}
@@ -118,7 +127,7 @@ namespace Automao.Data
 				if(sqls.Count == 1)
 					return sqls[0];
 
-				return string.Format("({0})", string.Join(where.ConditionCombine.Parse(), sqls));
+				return string.Format("{0}", string.Join(where.ConditionCombine.Parse(), sqls));
 			}
 
 			values = new object[0];
@@ -183,6 +192,9 @@ namespace Automao.Data
 					if(string.IsNullOrEmpty(result))
 						continue;
 
+					if(item is ConditionCollection)
+						result = string.Format("({0})", result);
+
 					sqls.Add(result);
 					vs.AddRange(values);
 				}
@@ -193,7 +205,7 @@ namespace Automao.Data
 				if(sqls.Count == 1)
 					return sqls[0];
 
-				return string.Format("({0})", string.Join(where.ConditionCombine.Parse(), sqls));
+				return string.Format("{0}", string.Join(where.ConditionCombine.Parse(), sqls));
 			}
 
 			values = new object[0];

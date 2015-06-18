@@ -177,7 +177,7 @@ namespace Automao.Data
 				if(columnInfo.JoinInfo != rootJoin && !tempJoinInfos.Contains(columnInfo.JoinInfo))
 				{
 					tempJoinInfos.Add(columnInfo.JoinInfo);
-					columnInfo.JoinInfo.GetParent(tempJoinInfos, p => p == rootJoin);
+					tempJoinInfos.AddRange(columnInfo.JoinInfo.GetParent(p => p == rootJoin || tempJoinInfos.Contains(p)));
 				}
 			}
 			var join = string.Join(" ", tempJoinInfos.OrderBy(p => p.TableEx).Select(p => p.ToJoinSql(_caseSensitive)));
@@ -204,7 +204,7 @@ namespace Automao.Data
 					if(columnInfo.JoinInfo != rootJoin && !tempJoinInfos.Contains(columnInfo.JoinInfo))
 					{
 						tempJoinInfos.Add(columnInfo.JoinInfo);
-						columnInfo.JoinInfo.GetParent(tempJoinInfos, p => groupColumnInfos.Any(pp => pp.JoinInfo == p));
+						tempJoinInfos.AddRange(columnInfo.JoinInfo.GetParent(p => groupColumnInfos.Any(pp => pp.JoinInfo == p) || tempJoinInfos.Contains(p)));
 					}
 				}
 
@@ -269,22 +269,46 @@ namespace Automao.Data
 			if(info == null)
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
-			var conditionNames = GetConditionName(condition).Where(p => p.IndexOf('.') > 0).ToDictionary(p => p, p => p.Substring(0, p.LastIndexOf('.')));
-			includes = includes == null ? conditionNames.Values.ToArray() : conditionNames.Values.Concat(includes).ToArray();
+			var joinInfos = new Dictionary<string, JoinInfo>();
+			var allColumnInfos = new Dictionary<string, ColumnInfo>();
+			var rootJoin = new JoinInfo(null, "", "T", info, null);
+			var conditionNames = GetConditionName(condition);
+			var allcolumns = conditionNames.Concat(includes);
+			foreach(var item in allcolumns)
+			{
+				if(allColumnInfos.ContainsKey(item))
+					continue;
 
-			Dictionary<string, Tuple<ClassInfo, string>> includeMapping;
+				var columnInfo = new ColumnInfo(item, info, joinInfos, rootJoin);
+				allColumnInfos.Add(item, columnInfo);
+			}
 
-			var joinsql = ParseJoinSql(includes, info, "T", out includeMapping);
+			int startFormatIndex = 0;
+			object[] values;
+			var whereSql = "WHERE {0}".FormatWhere(condition, allColumnInfos, _caseSensitive, ref startFormatIndex, out values);
 
-			var values = new object[0];
-			var formatStartIndex = 0;
-			var whereSql = "WHERE {0}".FormatWhere(condition,
-				(Func<string, Tuple<ClassInfo, string>>)(column => conditionNames.ContainsKey(column)
-					? includeMapping[conditionNames[column]]
-					: new Tuple<ClassInfo, string>(info, "T")), _caseSensitive, ref formatStartIndex, out values);
+			var tempJoinInfos = new List<JoinInfo>();
+			foreach(var item in allColumnInfos.Keys)
+			{
+				var columnInfo = allColumnInfos[item];
+				if(columnInfo.JoinInfo != rootJoin && !tempJoinInfos.Contains(columnInfo.JoinInfo))
+				{
+					tempJoinInfos.Add(columnInfo.JoinInfo);
+					tempJoinInfos.AddRange(columnInfo.JoinInfo.GetParent(p => p == rootJoin || tempJoinInfos.Contains(p)));
+				}
+			}
+			var joinsql = string.Join(" ", tempJoinInfos.OrderBy(p => p.TableEx).Select(p => p.ToJoinSql(_caseSensitive)));
 
-			var format = _caseSensitive ? "SELECT COUNT(0) FROM \"{0}\" T {1} {2}" : "SELECT COUNT(0) FROM {0} T {1} {2}";
-			var sql = string.Format(format, info.TableName, joinsql, whereSql);
+			var format = _caseSensitive ? "SELECT {0} FROM \"{1}\" T {2} {3}" : "SELECT {0} FROM {1} T {2} {3}";
+			string countSql;
+			if(includes == null || includes.Length == 0)
+				countSql = "COUNT(0)";
+			else if(includes.Length == 1)
+				countSql = string.Format("COUNT({0})", allColumnInfos[includes[0]].ToColumn(_caseSensitive));
+			else
+				countSql = string.Format("COUNT(CONCAT({0}))", string.Join(",", includes.Select(p => allColumnInfos[p]).Select(p => p.ToColumn(_caseSensitive))));
+
+			var sql = string.Format(format, countSql, info.TableName, joinsql, whereSql);
 
 			var result = DB.ExecuteScalar(sql, command => SetParameter(command, values.Select(p => new SqlExecuter.Parameter(p)).ToArray()));
 			return int.Parse(result.ToString());

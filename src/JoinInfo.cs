@@ -87,13 +87,17 @@ namespace Automao.Data
 		/// </summary>
 		/// <param name="list"></param>
 		/// <param name="stop"></param>
-		public void GetParent(List<JoinInfo> list, Func<JoinInfo, bool> stop)
+		public List<JoinInfo> GetParent(Func<JoinInfo, bool> stop)
 		{
-			if(!stop(this._parent) && this._parent != null && !list.Contains(this._parent))
+			var result = new List<JoinInfo>();
+
+			if(!stop(this._parent) && this._parent != null)
 			{
-				list.Add(this._parent);
-				this._parent.GetParent(list, stop);
+				result.Add(this._parent);
+				result.AddRange(this._parent.GetParent(stop));
 			}
+
+			return result;
 		}
 
 		public string ToJoinSql(bool caseSensitive)
