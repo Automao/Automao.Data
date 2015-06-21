@@ -33,21 +33,23 @@ using Zongsoft.Options.Configuration;
 
 namespace Automao.Data.Options.Configuration
 {
-    public class MappingFile:OptionConfigurationElement
+    public class Mappings:OptionConfigurationElementCollection
     {
-        /// <summary>
-        /// 数据映射文件路径
-        /// </summary>
-        [OptionConfigurationProperty("path")]
-        public string Path
+        protected override OptionConfigurationElement CreateNewElement()
+        {
+            return new Mapping();
+        }
+
+        protected override string GetElementKey(OptionConfigurationElement element)
+        {
+            return ((Mapping)element).Path;
+        }
+
+        protected override string ElementName
         {
             get
             {
-                return (string)base["path"];
-            }
-            set
-            {
-                base["path"] = value;
+                return "mapping";
             }
         }
     }

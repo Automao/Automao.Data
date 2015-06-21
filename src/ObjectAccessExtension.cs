@@ -236,7 +236,7 @@ namespace Automao.Data
 							return "";
 
 						if(values.Length == 1)
-							return string.Format("{0}= {{{1}}}", clauseOperator == ConditionOperator.NotIn ? "!" : "", formatIndex++);
+							return string.Format("{0} {{{1}}}", clauseOperator == ConditionOperator.NotIn ? "!=" : "=", formatIndex++);
 
 						var list = new List<string>();
 						for(int i = 0; i < values.Length; i++)
@@ -245,7 +245,7 @@ namespace Automao.Data
 						}
 
 						formatIndex += values.Length;
-						return string.Format("{0}IN ({1})", clauseOperator == ConditionOperator.NotIn ? "NOT " : "", string.Join(",", list));
+						return string.Format("{0} ({1})", clauseOperator == ConditionOperator.NotIn ? "NOT IN" : "IN", string.Join(",", list));
 					}
 
 				case ConditionOperator.LessThan:

@@ -1,14 +1,12 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <options>
-    <option path="Data">
-        <MySQL MySQL.type ="Automao.Data.Options.Configuration.DataOptionElement,Automao.Data"
-               ConnectionString="server=automao.cn;user id=root;Password=automao2015;database=automao_schema;persist security info=False"
-               Provider="MySql.Data.MySqlClient"
-               MappingFileName="automao"
-               WriteSql="false"/>
-
-        <MappingFiles MappingFiles.type="Automao.Data.Options.Configuration.MappingFiles,Automao.Data">
-            <add path="..\..\"/>
-        </MappingFiles>
-    </option>
+	<option path="Data">
+		<Automao Automao.type ="Automao.Data.Options.Configuration.GeneralOption,Automao.Data"
+					 ConnectionString="server=ip:port;user id=root;Password=******;database=db;persist security info=False"
+					 MappingFileName="automao">
+			<mappings>
+				<mapping path="..\..\"/>
+			</mappings>
+		</Automao>
+	</option>
 </options>

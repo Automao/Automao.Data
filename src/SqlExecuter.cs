@@ -40,49 +40,43 @@ namespace Automao.Data
 	internal class SqlExecuter
 	{
 		#region 字段
-		private bool _writeSql;
-		private Data.DbHelper _dbHelper;
-		private DataOptionElement _option;
 		private IEnlistment _enlistment;
 		#endregion
 
-		public SqlExecuter(IEnlistment enlistment, DataOptionElement option)
+		#region 构造函数
+		public SqlExecuter(IEnlistment enlistment)
 		{
-			_option = option;
 			_enlistment = enlistment;
 		}
+		#endregion
 
 		#region 属性
-		public bool WriteSql
+		public DbProviderFactory DbProviderFactory
 		{
-			set
-			{
-				_writeSql = value;
-			}
+			get;
+			set;
 		}
 
-		internal DbHelper DbHelper
+		public string ConnectionString
 		{
-			get
-			{
-				if(_dbHelper == null)
-					_dbHelper = DbHelper.GetDBHelper(_option);
-				return _dbHelper;
-			}
+			get;
+			set;
 		}
 
-		protected DbConnection DbConnection
+		private DbConnection DbConnection
 		{
 			get
 			{
 				var transaction = Transaction.Current;
+				DbConnection connection;
 				if(transaction != null)
 				{
-					var connection = transaction.Information.Arguments["DbConnection"] as DbConnection;
+					connection = transaction.Information.Arguments["DbConnection"] as DbConnection;
 					if(connection == null)
 					{
 						//创建一个新的数据连接对象
-						connection = DbHelper.DbConnection;
+						connection = DbProviderFactory.CreateConnection();
+						connection.ConnectionString = ConnectionString;
 						//打开当前数据连接
 						connection.Open();
 						//设置当前事务的环境参数
@@ -91,10 +85,13 @@ namespace Automao.Data
 
 						transaction.Enlist(_enlistment);
 					}
-					return connection;
 				}
-
-				return DbHelper.DbConnection;
+				else
+				{
+					connection = DbProviderFactory.CreateConnection();
+					connection.ConnectionString = ConnectionString;
+				}
+				return connection;
 			}
 		}
 
@@ -116,7 +113,7 @@ namespace Automao.Data
 		/// <param name="sql">复合格式查询语句</param>
 		/// <param name="paramers"></param>
 		/// <returns></returns>
-		public IEnumerable<Dictionary<string, object>> Select(string sql, Action<DbCommand> setParameter)
+		public IEnumerable<Dictionary<string, object>> Select(string sql, DbParameter[] parameters)
 		{
 			if(string.IsNullOrEmpty(sql))
 				throw new ArgumentNullException("formatSql");
@@ -126,10 +123,8 @@ namespace Automao.Data
 
 			using(var command = connection.CreateCommand())
 			{
-				command.CommandText = sql;
-				setParameter(command);
-
-				WriteSQL(sql, command);
+				command.CommandText = string.Format(sql, parameters.Select(p => (object)p.ParameterName).ToArray());
+				command.Parameters.AddRange(parameters);
 
 				try
 				{
@@ -162,7 +157,7 @@ namespace Automao.Data
 		/// </summary>
 		/// <param name="sql">复合格式查询语句</param>
 		/// <returns></returns>
-		public object ExecuteScalar(string sql, Action<DbCommand> setParameter)
+		public object ExecuteScalar(string sql, DbParameter[] parameters)
 		{
 			if(string.IsNullOrEmpty(sql))
 				throw new ArgumentNullException("formatSql");
@@ -172,8 +167,8 @@ namespace Automao.Data
 
 			using(var command = connection.CreateCommand())
 			{
-				command.CommandText = sql;
-				setParameter(command);
+				command.CommandText = string.Format(sql, parameters.Select(p => (object)p.ParameterName).ToArray());
+				command.Parameters.AddRange(parameters);
 
 				try
 				{
@@ -196,7 +191,7 @@ namespace Automao.Data
 		/// <param name="sql">复合格式查询语句</param>
 		/// <param name="paramers"></param>
 		/// <returns></returns>
-		public int Execute(string sql, Action<DbCommand> setParameter)
+		public int Execute(string sql, DbParameter[] parameters)
 		{
 			if(string.IsNullOrEmpty(sql))
 				throw new ArgumentNullException("formatSql");
@@ -206,8 +201,8 @@ namespace Automao.Data
 
 			using(var command = connection.CreateCommand())
 			{
-				command.CommandText = sql;
-				setParameter(command);
+				command.CommandText = string.Format(sql, parameters.Select(p => (object)p.ParameterName).ToArray());
+				command.Parameters.AddRange(parameters);
 
 				if(DbTransaction != null)
 					command.Transaction = DbTransaction;
@@ -235,7 +230,7 @@ namespace Automao.Data
 		/// <param name="paramers">输入参数</param>
 		/// <param name="outParamers">输出参数</param>
 		/// <returns></returns>
-		public IEnumerable<Dictionary<string, object>> ExecuteProcedure(string procedureName, Action<DbCommand> setParameter, out Dictionary<string, object> outParamers)
+		public IEnumerable<Dictionary<string, object>> ExecuteProcedure(string procedureName, DbParameter[] parameters, out Dictionary<string, object> outParamers)
 		{
 			if(string.IsNullOrEmpty(procedureName))
 				throw new ArgumentNullException("procedureName");
@@ -248,9 +243,10 @@ namespace Automao.Data
 			{
 				command.CommandText = procedureName;
 				command.CommandType = CommandType.StoredProcedure;
-				setParameter(command);
 
-				using(var adapter = DbHelper.DbDataAdapter)
+				command.Parameters.AddRange(parameters);
+
+				using(var adapter = DbProviderFactory.CreateDataAdapter())
 				{
 					adapter.SelectCommand = command;
 					adapter.Fill(table);
@@ -313,97 +309,6 @@ namespace Automao.Data
 			}
 
 			return value;
-		}
-
-		public void WriteSQL(string sql, DbCommand command)
-		{
-			if(!_writeSql)
-				return;
-			try
-			{
-				var paramersStr = command.Parameters == null ? "" :
-					string.Join(Environment.NewLine, command.Parameters.Cast<DbParameter>().Select(p => string.Format("Name={0},Size={1},Value={2},DbType={3},IsInoutPut={4},IsOutPut={5}", p.ParameterName, p.Size, p.Value, p.DbType, p.Direction == ParameterDirection.InputOutput, p.Direction == ParameterDirection.Output)));
-
-				var str = string.Format("{0}/////////////////{0}{1}{0}/////////////////{0}{2}{0}{3}{0}", Environment.NewLine, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), sql, paramersStr);
-				var path = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Automao.Data.sql.txt");
-				System.IO.File.AppendAllText(path, str, Encoding.UTF8);
-
-				var fi = new System.IO.FileInfo(path);
-				if(fi.Length > 1024 * 1024)
-				{
-					var oldPath = path.Insert(path.LastIndexOf('.'), "(old)");
-					if(System.IO.File.Exists(oldPath))
-						System.IO.File.Delete(oldPath);
-					fi.MoveTo(oldPath);
-				}
-			}
-			catch
-			{
-			}
-		}
-
-		/// <summary>
-		/// 参数
-		/// </summary>
-		public class Parameter
-		{
-			public Parameter(object value, string dbType = null, string name = null, bool isOutPut = false, bool isInOutPut = false, int? size = null)
-			{
-				Value = value;
-				Name = name;
-				DbType = dbType;
-				IsOutPut = isOutPut;
-				IsInoutPut = isInOutPut;
-				Size = size;
-			}
-			/// <summary>
-			/// 名称
-			/// </summary>
-			public string Name
-			{
-				get;
-				set;
-			}
-			/// <summary>
-			/// 类型
-			/// </summary>
-			public string DbType
-			{
-				get;
-				set;
-			}
-			/// <summary>
-			/// 是否是输出参数
-			/// </summary>
-			public bool IsOutPut
-			{
-				get;
-				set;
-			}
-			/// <summary>
-			/// 是否是输入输出参数
-			/// </summary>
-			public bool IsInoutPut
-			{
-				get;
-				set;
-			}
-			/// <summary>
-			/// 值
-			/// </summary>
-			public object Value
-			{
-				get;
-				set;
-			}
-			/// <summary>
-			/// 大小
-			/// </summary>
-			public int? Size
-			{
-				get;
-				set;
-			}
 		}
 	}
 }

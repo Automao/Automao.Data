@@ -12,23 +12,14 @@
 		</assemblies>
 	</manifest>
 
-	<extension path="/Workspace/Services">
-		<object name="MySQL"  type="Automao.Data.MySqlDataAccess,Automao.Data"
-						Option="{opt:/Data/MySQL}"
-						MappingFactory="{path:/Workspace/Data/MappingFactory}"/>
-	</extension>
-
-	<extension path="/Workspace/Data">
-		<object name="MappingFactory" type="Automao.Data.Services.MappingFactory,Automao.Data"
-						MappingFiles="{opt:/Data/MappingFiles}"/>
+	<extension path="/Workspace/Services/Data">
+		<object name="Automao"  type="Automao.Data.MySqlDataAccess,Automao.Data" Option="{opt:/Data/Automao}"/>
 	</extension>
 
 	<!--选项设置-->
 	<extension path="/Workbench/Options">
-		<option name="Data" title="{res:Data.Title}">
-			<option name="Oracle" title="{res:Data.Oracle.Title}" provider="."/>
-			<option name="MySQL" title="{res:Data.MySQL.Title}" provider="."/>
-			<option name="MappingFiles" title="{res:Data.MappingFiles.Title}" provider="."/>
+		<option name="Data" title="{res:Text.Data.Title}">
+			<option name="Automao" title="{res:Text.Data.Automao.Title}" provider="."/>
 		</option>
 	</extension>
 </plugin>

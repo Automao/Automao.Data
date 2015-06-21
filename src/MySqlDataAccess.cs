@@ -38,12 +38,14 @@ namespace Automao.Data
 	{
 		#region 字段
 		private Dictionary<string, DbType> _dbTypes;
+		private DbProviderFactory _providerFactory;
 		#endregion
 
 		#region 构造函数
 		public MySqlDataAccess()
-			: base(false)
+			: base(false, DbProviderFactories.GetFactory("MySql.Data.MySqlClient"))
 		{
+			_providerFactory = DbProviderFactories.GetFactory("MySql.Data.MySqlClient");
 		}
 		#endregion
 
@@ -100,46 +102,36 @@ namespace Automao.Data
 			return sql;
 		}
 
-		internal override void SetParameter(DbCommand command, SqlExecuter.Parameter[] paramers)
+		internal override DbParameter CreateParameter(int index, object value, string dbType = null, string name = null, bool isOutPut = false, bool isInOutPut = false, int? size = null, bool isProcedure = false)
 		{
-			if(paramers != null && paramers.Length != 0)
+			var paramer = _providerFactory.CreateParameter();
+			paramer.ParameterName = string.IsNullOrEmpty(name) ? ("p" + index) : name;
+			if(!isProcedure)
+				paramer.ParameterName = "@" + paramer.ParameterName;
+
+			if(value != null)
 			{
-				var paramerNames = new string[paramers.Length];
-				for(int i = 0; i < paramers.Length; i++)
+				if(value is byte[])
 				{
-					var paramer = command.CreateParameter();
-					var p = paramers[i];
-					var parameterName = string.IsNullOrEmpty(p.Name) ? ("p" + i) : p.Name;
-					parameterName = command.CommandType == CommandType.StoredProcedure ? parameterName : ("@" + parameterName);
-					paramer.ParameterName = parameterName;
-					paramerNames[i] = parameterName;
-
-					if(p.Value != null)
-					{
-						if(p.Value is byte[])
-						{
-							paramer.Value = p.Value;
-						}
-						else
-							paramer.Value = SqlExecuter.ConvertValue(p.Value);
-					}
-					else if(!string.IsNullOrEmpty(p.DbType))
-					{
-						if(DbTypes.ContainsKey(p.DbType.ToUpper()))
-							paramer.DbType = DbTypes[p.DbType.ToUpper()];
-					}
-
-					if(p.Size.HasValue)
-						paramer.Size = p.Size.Value;
-					if(p.IsOutPut)
-						paramer.Direction = ParameterDirection.Output;
-					else if(p.IsInoutPut)
-						paramer.Direction = ParameterDirection.InputOutput;
-
-					command.Parameters.Add(paramer);
+					paramer.Value = value;
 				}
-				command.CommandText = string.Format(command.CommandText, paramerNames);
+				else
+					paramer.Value = SqlExecuter.ConvertValue(value);
 			}
+			else if(!string.IsNullOrEmpty(dbType))
+			{
+				if(DbTypes.ContainsKey(dbType.ToUpper()))
+					paramer.DbType = DbTypes[dbType.ToUpper()];
+			}
+
+			if(size.HasValue)
+				paramer.Size = size.Value;
+			if(isOutPut)
+				paramer.Direction = ParameterDirection.Output;
+			else if(isInOutPut)
+				paramer.Direction = ParameterDirection.InputOutput;
+
+			return paramer;
 		}
 		#endregion
 	}

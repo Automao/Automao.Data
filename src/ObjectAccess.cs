@@ -38,7 +38,6 @@ using Zongsoft.Data;
 using Zongsoft.ComponentModel;
 using Zongsoft.Transactions;
 
-using Automao.Data.Services;
 using Automao.Data.Options.Configuration;
 
 namespace Automao.Data
@@ -46,9 +45,10 @@ namespace Automao.Data
 	public abstract class ObjectAccess : DataAccessBase, IEnlistment
 	{
 		#region 字段
-		private MappingInfo _mappingInfo;
-		private SqlExecuter _db;
+		private SqlExecuter _executer;
 		private bool _caseSensitive;
+		private DbProviderFactory _providerFactory;
+		private List<ClassInfo> _classInfoList;
 		#endregion
 
 		#region 构造函数
@@ -56,42 +56,42 @@ namespace Automao.Data
 		/// 
 		/// </summary>
 		/// <param name="caseSensitive">区分大小写</param>
-		public ObjectAccess(bool caseSensitive)
+		public ObjectAccess(bool caseSensitive, DbProviderFactory providerFactory)
 		{
 			_caseSensitive = caseSensitive;
+			_providerFactory = providerFactory;
 		}
 		#endregion
 
 		#region 属性
-		public DataOptionElement Option
+		public GeneralOption Option
 		{
 			get;
 			set;
 		}
 
-		public IMappingFactory MappingFactory
-		{
-			get;
-			set;
-		}
-
-		protected MappingInfo MappingInfo
+		protected List<ClassInfo> ClassInfoList
 		{
 			get
 			{
-				if(_mappingInfo == null)
-					_mappingInfo = new MappingInfo(MappingFactory.GetMappingContext(Option.MappingFileName));
-				return _mappingInfo;
+				if(_classInfoList == null)
+					System.Threading.Interlocked.CompareExchange(ref _classInfoList,
+						MappingInfo.CreateClassInfo(Option.Mappings.Select(p => ((Mapping)p).Path).ToArray(), Option.MappingFileName), null);
+				return _classInfoList;
 			}
 		}
 
-		internal SqlExecuter DB
+		internal SqlExecuter Executer
 		{
 			get
 			{
-				if(_db == null)
-					Interlocked.CompareExchange(ref _db, new SqlExecuter(this, Option), null);
-				return _db;
+				if(_executer == null)
+					Interlocked.CompareExchange(ref _executer, new SqlExecuter(this)
+					{
+						DbProviderFactory = _providerFactory,
+						ConnectionString = Option.ConnectionString
+					}, null);
+				return _executer;
 			}
 		}
 		#endregion
@@ -103,7 +103,7 @@ namespace Automao.Data
 			if(string.IsNullOrEmpty(name))
 				name = typeof(T).Name;
 
-			var classInfo = MappingInfo.MappingList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.OrdinalIgnoreCase));
+			var classInfo = ClassInfoList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.OrdinalIgnoreCase));
 			if(classInfo == null)
 				throw new Exception(string.Format("未找到{0}对应的mapping节点", name));
 
@@ -235,7 +235,7 @@ namespace Automao.Data
 			var sql = CreateSelectSql(classInfo.TableName, rootJoin.TableEx, newTableNameEx, columns, where, join,
 				group, having, groupedSelectColumns, groupedJoin, orderby, paging);
 
-			var tablevalues = this.DB.Select(sql, command => SetParameter(command, values.Select(p => new SqlExecuter.Parameter(p)).ToArray()));
+			var tablevalues = this.Executer.Select(sql, CreateParameters(0, values));
 
 			var result = SetEntityValue<T>(tablevalues, rootJoin);
 
@@ -244,7 +244,7 @@ namespace Automao.Data
 				sql = CreateSelectSql(classInfo.TableName, rootJoin.TableEx, newTableNameEx, grouping == null ? "COUNT(0)" : columns, where, join,
 					group, having, grouping == null ? null : "COUNT(0)", groupedJoin, null, null);
 
-				tablevalues = this.DB.Select(sql, command => SetParameter(command, values.Select(p => new SqlExecuter.Parameter(p)).ToArray()));
+				tablevalues = this.Executer.Select(sql, CreateParameters(0, values));
 
 				if(tablevalues != null)
 				{
@@ -265,7 +265,7 @@ namespace Automao.Data
 			if(string.IsNullOrEmpty(name))
 				throw new ArgumentNullException("name");
 
-			var info = this.MappingInfo.MappingList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.CurrentCultureIgnoreCase));
+			var info = this.ClassInfoList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.CurrentCultureIgnoreCase));
 			if(info == null)
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
@@ -310,7 +310,7 @@ namespace Automao.Data
 
 			var sql = string.Format(format, countSql, info.TableName, joinsql, whereSql);
 
-			var result = DB.ExecuteScalar(sql, command => SetParameter(command, values.Select(p => new SqlExecuter.Parameter(p)).ToArray()));
+			var result = Executer.ExecuteScalar(sql, CreateParameters(0, values));
 			return int.Parse(result.ToString());
 		}
 		#endregion
@@ -324,7 +324,7 @@ namespace Automao.Data
 			if(string.IsNullOrEmpty(name))
 				throw new ArgumentNullException("name");
 
-			var info = this.MappingInfo.MappingList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.CurrentCultureIgnoreCase));
+			var info = this.ClassInfoList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.CurrentCultureIgnoreCase));
 			if(info == null)
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
@@ -337,14 +337,14 @@ namespace Automao.Data
 
 			var format = _caseSensitive ? "DELETE FROM \"{0}\" {1}" : "DELETE FROM {0} {1}";
 			var sql = string.Format(format, info.TableName, whereSql);
-			return DB.Execute(sql, command => SetParameter(command, values.Select(p => new SqlExecuter.Parameter(p)).ToArray()));
+			return Executer.Execute(sql, CreateParameters(0, values));
 		}
 		#endregion
 
 		#region 执行
 		public override object Execute(string name, IDictionary<string, object> inParameters, out IDictionary<string, object> outParameters)
 		{
-			var classInfo = this.MappingInfo.MappingList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.OrdinalIgnoreCase));
+			var classInfo = this.ClassInfoList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.OrdinalIgnoreCase));
 
 			if(classInfo == null)
 			{
@@ -352,14 +352,14 @@ namespace Automao.Data
 				return null;
 			}
 
-			var procedureInfo = this.MappingInfo.MappingList.FirstOrDefault(p => p.ClassName.Equals(classInfo.TableName, StringComparison.OrdinalIgnoreCase));
+			var procedureInfo = this.ClassInfoList.FirstOrDefault(p => p.ClassName.Equals(classInfo.TableName, StringComparison.OrdinalIgnoreCase));
 			if(procedureInfo == null)
 				procedureInfo = classInfo;
 
 			var outPropertyInfos = procedureInfo.PropertyInfoList.Where(p => p.IsOutPutParamer);
 
 			Dictionary<string, object> dic;
-			var paramers = inParameters.Where(p => p.Value != null).Select(p =>
+			var paramers = inParameters.Where(p => p.Value != null).Select((p, i) =>
 			{
 				var parameterName = p.Key;
 				var dbType = "";
@@ -376,11 +376,12 @@ namespace Automao.Data
 						size = item.Size;
 					}
 				}
-				return new SqlExecuter.Parameter(p.Value, dbType, parameterName, false, isInOutPut, size);
+				return CreateParameter(i, p.Value, dbType, parameterName, false, isInOutPut, size, true);
 			}).ToList();
-			paramers.AddRange(procedureInfo.PropertyInfoList.Where(p => !inParameters.ContainsKey(p.ClassPropertyName) && !p.PassedIntoConstructor).Select(p => new SqlExecuter.Parameter(null, p.DbType, p.TableColumnName, p.IsOutPutParamer, false, p.Size)));
 
-			var tablevalues = DB.ExecuteProcedure(procedureInfo.TableName, command => SetParameter(command, paramers.ToArray()), out dic);
+			paramers.AddRange(procedureInfo.PropertyInfoList.Where(p => !inParameters.ContainsKey(p.ClassPropertyName) && !p.PassedIntoConstructor).Select((p, i) => CreateParameter(paramers.Count + i, null, p.DbType, p.TableColumnName, p.IsOutPutParamer, false, p.Size, true)).ToArray());
+
+			var tablevalues = Executer.ExecuteProcedure(procedureInfo.TableName, paramers.ToArray(), out dic);
 
 			outParameters = dic.ToDictionary(p => outPropertyInfos.FirstOrDefault(pp => pp.TableColumnName == p.Key).ClassPropertyName, p => p.Value);
 
@@ -400,7 +401,7 @@ namespace Automao.Data
 			List<string> pkColumnNames = new List<string>();
 
 			var insertCount = 0;
-			var sqls = new List<KeyValuePair<string, SqlExecuter.Parameter[]>>();
+			var sqls = new List<KeyValuePair<string, DbParameter[]>>();
 
 			var insertformat = _caseSensitive ? "INSERT INTO \"{0}\"({1}) VALUES({2})" : "INSERT INTO {0}({1}) VALUES({2})";
 			var columnformat = _caseSensitive ? "\"{0}\"" : "{0}";
@@ -417,15 +418,15 @@ namespace Automao.Data
 					string.Join(",", dic.Select((p, i) => string.Format("{{{0}}}", i)))
 				);
 
-				var paramers = dic.Select(p => new SqlExecuter.Parameter(p.Value, p.Key.DbType, size: p.Key.Size)).ToArray();
+				var paramers = dic.Select((p, i) => CreateParameter(i, p.Value, p.Key.DbType, size: p.Key.Size)).ToArray();
 
-				sqls.Add(new KeyValuePair<string, SqlExecuter.Parameter[]>(sql, paramers));
+				sqls.Add(new KeyValuePair<string, DbParameter[]>(sql, paramers));
 
 			}
 
 			foreach(var item in sqls)
 			{
-				var count = DB.Execute(item.Key, command => SetParameter(command, item.Value));
+				var count = Executer.Execute(item.Key, item.Value);
 				if(count > 0)
 					insertCount++;
 			}
@@ -443,11 +444,11 @@ namespace Automao.Data
 			if(members == null || members.Length == 0)
 				throw new ArgumentNullException("members");
 
-			var info = MappingInfo.MappingList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.OrdinalIgnoreCase));
+			var info = ClassInfoList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.OrdinalIgnoreCase));
 			if(info == null)
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
-			var sqls = new List<KeyValuePair<string, SqlExecuter.Parameter[]>>();
+			var sqls = new List<KeyValuePair<string, DbParameter[]>>();
 			var tuple = new Tuple<ClassInfo, string>(info, "T");
 
 			var columnformat = _caseSensitive ? "\"{0}\"={{{1}}}" : "{0}={{{1}}}";
@@ -460,25 +461,25 @@ namespace Automao.Data
 
 				var temp = dic.Where(p => p.Value != null);
 				var list = temp.Select((p, i) => string.Format(columnformat, p.Key.TableColumnName, i)).ToList();
-				var paramers = temp.Select(p => new SqlExecuter.Parameter(p.Value, p.Key.DbType, size: p.Key.Size)).ToList();
+				var paramers = temp.Select((p, i) => CreateParameter(i, p.Value, p.Key.DbType, size: p.Key.Size)).ToList();
 
 				list.AddRange(dic.Where(p => p.Value == null).Select(p => string.Format(nullcolumnformat, p.Key.TableColumnName)));
 
 				var values = new object[0];
 				var formatStartIndex = paramers.Count;
 				var wheresql = "WHERE {0}".FormatWhere(condition, column => tuple, _caseSensitive, ref formatStartIndex, out values);
-				paramers.AddRange(values.Select(p => new SqlExecuter.Parameter(p)));
+				paramers.AddRange(CreateParameters(paramers.Count, values));
 
 				var sql = string.Format(updateformat, name, string.Join(",", list), wheresql);
 
-				sqls.Add(new KeyValuePair<string, SqlExecuter.Parameter[]>(sql, paramers.ToArray()));
+				sqls.Add(new KeyValuePair<string, DbParameter[]>(sql, paramers.ToArray()));
 			}
 
 			var updateCount = 0;
 
 			foreach(var sql in sqls)
 			{
-				updateCount += DB.Execute(sql.Key, command => SetParameter(command, sql.Value));
+				updateCount += Executer.Execute(sql.Key, sql.Value);
 			}
 
 			return updateCount;
@@ -487,7 +488,7 @@ namespace Automao.Data
 
 		protected override Type GetEntityType(string name)
 		{
-			return MappingInfo.MappingList.Where(p => p.ClassName.Equals(name, StringComparison.OrdinalIgnoreCase)).Select(p => p.EntityType).FirstOrDefault();
+			return ClassInfoList.Where(p => p.ClassName.Equals(name, StringComparison.OrdinalIgnoreCase)).Select(p => p.EntityType).FirstOrDefault();
 		}
 		#endregion
 
@@ -590,7 +591,7 @@ namespace Automao.Data
 
 		protected Dictionary<ClassPropertyInfo, object> GetColumnFromEntity(string name, object entity, string[] members = null)
 		{
-			var info = this.MappingInfo.MappingList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.CurrentCultureIgnoreCase));
+			var info = this.ClassInfoList.FirstOrDefault(p => p.ClassName.Equals(name, StringComparison.CurrentCultureIgnoreCase));
 
 			IDictionary<string, object> properties;
 
@@ -629,10 +630,15 @@ namespace Automao.Data
 				};
 			}).Where(p => p != null).ToDictionary(p => p.key, p => p.value);
 		}
+
+		public DbParameter[] CreateParameters(int startIndex, object[] values)
+		{
+			return values.Select((p, i) => CreateParameter(startIndex + i, p)).ToArray();
+		}
 		#endregion
 
 		#region 抽像方法
-		internal abstract void SetParameter(DbCommand command, SqlExecuter.Parameter[] paramers);
+		internal abstract DbParameter CreateParameter(int index, object value, string dbType = null, string name = null, bool isOutPut = false, bool isInOutPut = false, int? size = null, bool isProcedure = false);
 		#endregion
 
 		#region 私有方法

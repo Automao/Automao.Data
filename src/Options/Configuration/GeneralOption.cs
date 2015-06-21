@@ -26,55 +26,52 @@
 
 using System;
 using System.Collections.Generic;
-using System.Configuration;
-using System.Data;
-using System.Data.Common;
 using System.Linq;
 using System.Text;
-using System.Threading;
-using System.Xml.Linq;
 
-namespace Automao.Data
+using Zongsoft.Options.Configuration;
+
+namespace Automao.Data.Options.Configuration
 {
-    internal class DbHelper
+    public class GeneralOption : OptionConfigurationElement
     {
-        private Options.Configuration.DataOptionElement _option;
-        private System.Data.Common.DbProviderFactory _dbProviderFactory;
-
-        internal static DbHelper GetDBHelper(Options.Configuration.DataOptionElement option)
-        {
-            var dbHelper = new DbHelper();
-            dbHelper._option = option;
-            return dbHelper;
-        }
-
-        internal DbProviderFactory DbProviderFactory
+        [OptionConfigurationProperty("ConnectionString")]
+        public string ConnectionString
         {
             get
             {
-                if (_dbProviderFactory == null)
-                    _dbProviderFactory = DbProviderFactories.GetFactory(_option.Provider);
-                return _dbProviderFactory;
+                return base["ConnectionString"].ToString();
+            }
+            set
+            {
+                base["ConnectionString"] = value;
             }
         }
 
-        internal DbConnection DbConnection
+        [OptionConfigurationProperty("MappingFileName")]
+        public string MappingFileName
         {
             get
             {
-                var conn = DbProviderFactory.CreateConnection();
-                conn.ConnectionString = _option.ConnectionString;
-                return conn;
+                return base["MappingFileName"].ToString();
+            }
+            set
+            {
+                base["MappingFileName"] = value;
             }
         }
 
-        internal DbDataAdapter DbDataAdapter
-        {
-            get
-            {
-                var adapter = DbProviderFactory.CreateDataAdapter();
-                return adapter;
-            }
-        }
-    }
+		[OptionConfigurationProperty("mappings")]
+		public Mappings Mappings
+		{
+			get
+			{
+				return (Mappings)base["mappings"];
+			}
+			set
+			{
+				base["mappings"] = value;
+			}
+		}
+	}
 }

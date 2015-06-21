@@ -35,16 +35,16 @@ namespace Automao.Data
 {
 	public class MappingInfo
 	{
-		private List<ClassInfo> _mappingList;
-
-		public MappingInfo(Dictionary<string, string> contexts)
+		public static List<ClassInfo> CreateClassInfo(string[] paths, string mappingFileName)
 		{
-			Init(contexts);
-		}
+			if(paths == null || paths.Length == 0)
+				paths = new[] { AppDomain.CurrentDomain.BaseDirectory };
+			else
+				paths = paths.Select(p => ParsePath(p)).ToArray();
 
-		private void Init(Dictionary<string, string> contexts)
-		{
-			_mappingList = new List<ClassInfo>();
+			var contexts = GetMappingContext(paths, mappingFileName);
+
+			var result = new List<ClassInfo>();
 			Dictionary<string, string> dicJoin = new Dictionary<string, string>();
 			XElement xml;
 			foreach(var item in contexts)
@@ -56,7 +56,7 @@ namespace Automao.Data
 					info.MappingFileFullName = item.Key;
 					info.ClassName = element.Name.ToString();
 
-					var temp = _mappingList.FirstOrDefault(p => p.ClassName.Equals(info.ClassName, StringComparison.OrdinalIgnoreCase));
+					var temp = result.FirstOrDefault(p => p.ClassName.Equals(info.ClassName, StringComparison.OrdinalIgnoreCase));
 					if(temp != null)
 						throw new Exception(string.Format("文件[{0}]和文件[{1}]中同时存在\"{2}\"节点", temp.MappingFileFullName, info.MappingFileFullName, info.ClassName));
 
@@ -133,10 +133,11 @@ namespace Automao.Data
 						propertyInfo.Host = info;
 						info.PropertyInfoList.Add(propertyInfo);
 					}
-					_mappingList.Add(info);
+					result.Add(info);
 				}
 			}
-			_mappingList.ForEach(p =>
+
+			result.ForEach(p =>
 			{
 				p.PropertyInfoList.ForEach(pp =>
 				{
@@ -144,7 +145,7 @@ namespace Automao.Data
 					{
 						var joinClassName = dicJoin[string.Format("{0},{1}", p.ClassName, pp.ClassPropertyName)];
 						var array = joinClassName.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
-						var classInfo = _mappingList.FirstOrDefault(c => c.ClassName.Equals(array[0], StringComparison.OrdinalIgnoreCase));
+						var classInfo = result.FirstOrDefault(c => c.ClassName.Equals(array[0], StringComparison.OrdinalIgnoreCase));
 						if(classInfo != null)
 						{
 							pp.Join = classInfo;
@@ -153,230 +154,70 @@ namespace Automao.Data
 					}
 				});
 			});
+
+			return result;
 		}
 
-		/// <summary>
-		/// 对应关系集合
-		/// </summary>
-		public List<ClassInfo> MappingList
+		private static Dictionary<string, string> GetMappingContext(string[] paths, string mappingFileName)
 		{
-			get
+			Console.WriteLine("[{0}]", string.Join("\r\n", paths));
+
+			var result = new Dictionary<string, string>();
+			foreach(var path in paths)
 			{
-				return _mappingList;
-			}
-		}
-	}
-	/// <summary>
-	/// 类详情
-	/// </summary>
-	public class ClassInfo
-	{
-		private Type _entityType;
-		/// <summary>
-		/// 类信息
-		/// </summary>
-		public string Assembly
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 类名
-		/// </summary>
-		public string ClassName
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 表名
-		/// </summary>
-		public string TableName
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 是否是存储过程
-		/// </summary>
-		public bool IsProcedure
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 属性集合
-		/// </summary>
-		public List<ClassPropertyInfo> PropertyInfoList
-		{
-			get;
-			set;
-		}
+				if(result.ContainsKey(path))
+					continue;
 
-		/// <summary>
-		/// 所在文件路径
-		/// </summary>
-		public string MappingFileFullName
-		{
-			get;
-			set;
-		}
-
-		public Type EntityType
-		{
-			get
-			{
-				if(_entityType == null)
-					_entityType = GetEntityType();
-				return _entityType;
-			}
-		}
-
-		public string GetColumn(string name)
-		{
-			var array = name.Split(',').ToList();
-			if(array.Count > 1)
-			{
-				var propertyInfo = PropertyInfoList.FirstOrDefault(p => p.IsFKColumn && p.SetClassPropertyName.Equals(array[0], StringComparison.OrdinalIgnoreCase));
-				if(propertyInfo != null)
+				if(path.StartsWith("http://"))
 				{
-					array.RemoveAt(0);
-					return propertyInfo.Join.GetColumn(string.Join(".", array));
+					var wc = new System.Net.WebClient();
+					var buffer = wc.DownloadData(path);
+					var text = Encoding.UTF8.GetString(buffer);
+					result.Add(path, text);
+				}
+				else
+				{
+					var di = new DirectoryInfo(path);
+					if(di.Exists)
+					{
+						var files = System.IO.Directory.GetFiles(path, mappingFileName + ".mapping", System.IO.SearchOption.AllDirectories);
+
+						var temp = GetMappingContext(files, mappingFileName);
+						foreach(var item in temp)
+						{
+							result.Add(item.Key, item.Value);
+						}
+					}
+					else
+					{
+						var fi = new FileInfo(path);
+						if(fi.Exists)
+						{
+							using(var sr = fi.OpenText())
+							{
+								var text = sr.ReadToEnd();
+								result.Add(path, text);
+							}
+						}
+					}
 				}
 			}
-
-			var pi = PropertyInfoList.FirstOrDefault(p => p.ClassPropertyName.Equals(name, StringComparison.OrdinalIgnoreCase));
-			if(pi != null)
-				return pi.TableColumnName;
-			return name;
+			return result;
 		}
 
-		private Type GetEntityType()
+		private static string ParsePath(string path)
 		{
-			if(string.IsNullOrEmpty(Assembly))
-				throw new Exception(string.Format("当前节点({0})的Assembly为空", ClassName));
-			var entityType = Type.GetType(Assembly);
-			if(entityType == null)
-				throw new Exception(string.Format("当前节点({0})的Assembly出错", ClassName));
-			return entityType;
-		}
-	}
+			if(!path.Contains("..\\"))
+				return path;
 
-	/// <summary>
-	/// 属性详情
-	/// </summary>
-	public class ClassPropertyInfo
-	{
-		public ClassInfo Host
-		{
-			get;
-			set;
-		}
+			var index = path.IndexOf("..\\");
+			var directory = path.Substring(0, index);
+			if(string.IsNullOrEmpty(directory))
+				directory = Path.GetDirectoryName(typeof(MappingInfo).Assembly.Location);
+			directory = Directory.GetParent(directory).FullName;
 
-		/// <summary>
-		/// 类中属性名称
-		/// </summary>
-		public string ClassPropertyName
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 表中列名
-		/// </summary>
-		public string TableColumnName
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 数据类型
-		/// </summary>
-		public string DbType
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 数据大小
-		/// </summary>
-		public int? Size
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 是否为主键
-		/// </summary>
-		public bool IsPKColumn
-		{
-			get;
-			set;
-		}
-
-		/// <summary>
-		/// 是否传入构造函数
-		/// </summary>
-		public bool PassedIntoConstructor
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 构造函数对应参数名称
-		/// </summary>
-		public string ConstructorName
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 是否为输出参数
-		/// </summary>
-		public bool IsOutPutParamer
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 是否为外键
-		/// </summary>
-		public bool IsFKColumn
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 是否可为空
-		/// </summary>
-		public bool Nullable
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 外键关联主表
-		/// </summary>
-		public ClassInfo Join
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 外键关联列
-		/// </summary>
-		public ClassPropertyInfo JoinColumn
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 要将关联对像赋值给当前名称指定的属性
-		/// </summary>
-		public string SetClassPropertyName
-		{
-			get;
-			set;
+			path = Path.Combine(directory, path.Substring(index + 3));
+			return ParsePath(path);
 		}
 	}
 }
