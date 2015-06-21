@@ -17,17 +17,10 @@ namespace Automao.Data.Tests
 		public Test()
 		{
 			_db = new MySqlDataAccess();
-			var mfs = new Automao.Data.Options.Configuration.MappingFiles();
-			mfs.Add(new Automao.Data.Options.Configuration.MappingFile());
 
-			_db.MappingFactory = new Automao.Data.Services.MappingFactory()
-			{
-				MappingFiles = mfs
-			};
-
-			_db.Option = new Options.Configuration.DataOptionElement();
-			_db.Option.ConnectionString = "server=automao.cn;user id=root;Password=automao2015;database=automao_schema;persist security info=False";
-			_db.Option.Provider = "MySql.Data.MySqlClient";
+			_db.Option = new Options.Configuration.GeneralOption();
+			_db.Option.ConnectionString = "server=ip:port;user id=root;Password=******;database=db;persist security info=False";
+			_db.Option.Mappings = new Options.Configuration.Mappings();
 			_db.Option.MappingFileName = "test";
 		}
 
