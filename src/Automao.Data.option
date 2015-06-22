@@ -2,7 +2,7 @@
 <options>
 	<option path="Data">
 		<Automao Automao.type ="Automao.Data.Options.Configuration.GeneralOption,Automao.Data"
-					 ConnectionString="server=ip:port;user id=root;Password=******;database=db;persist security info=False"
+					 ConnectionString="server=ip:port;user id=root;Password=******;database=db;persist security info=False;Charset=utf8"
 					 MappingFileName="automao">
 			<mappings>
 				<mapping path="..\..\"/>
