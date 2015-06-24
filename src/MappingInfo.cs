@@ -52,26 +52,29 @@ namespace Automao.Data
 				xml = XElement.Parse(item.Value);
 				foreach(var element in xml.Elements())
 				{
+					string attribuleValue;
+
 					ClassInfo info = new ClassInfo();
 					info.MappingFileFullName = item.Key;
 					info.ClassName = element.Name.ToString();
+
 
 					var temp = result.FirstOrDefault(p => p.ClassName.Equals(info.ClassName, StringComparison.OrdinalIgnoreCase));
 					if(temp != null)
 						throw new Exception(string.Format("文件[{0}]和文件[{1}]中同时存在\"{2}\"节点", temp.MappingFileFullName, info.MappingFileFullName, info.ClassName));
 
-					if(element.Attribute("Table") != null && !string.IsNullOrEmpty(element.Attribute("Table").Value))
-						info.TableName = element.Attribute("Table").Value.Trim();
-					else if(element.Attribute("Procedure") != null && !string.IsNullOrEmpty(element.Attribute("Procedure").Value))
+					if(GetAttribuleValue(element, "Table", out attribuleValue))
+						info.TableName = attribuleValue;
+					else if(GetAttribuleValue(element, "Procedure", out attribuleValue))
 					{
-						info.TableName = element.Attribute("Procedure").Value.Trim();
+						info.TableName = attribuleValue;
 						info.IsProcedure = true;
 					}
 					else
 						info.TableName = info.ClassName;
 
-					if(element.Attribute("Assembly") != null && !string.IsNullOrEmpty(element.Attribute("Assembly").Value))
-						info.Assembly = element.Attribute("Assembly").Value;
+					if(GetAttribuleValue(element, "Assembly", out attribuleValue))
+						info.Assembly = attribuleValue;
 					else
 						info.Assembly = "System.Object,mscorlib";
 
@@ -80,55 +83,53 @@ namespace Automao.Data
 					{
 						ClassPropertyInfo propertyInfo = new ClassPropertyInfo();
 						propertyInfo.ClassPropertyName = property.Name.ToString();
-						if(property.Attribute("ConstructorName") != null && !string.IsNullOrEmpty(property.Attribute("ConstructorName").Value))
+
+						if(GetAttribuleValue(property, "ConstructorName", out attribuleValue))
 						{
-							propertyInfo.ConstructorName = property.Attribute("ConstructorName").Value;
+							propertyInfo.ConstructorName = attribuleValue;
 							propertyInfo.PassedIntoConstructor = true;
 						}
 
-						if(property.Attribute("PKColumn") != null && !string.IsNullOrEmpty(property.Attribute("PKColumn").Value))
+						if(GetAttribuleValue(property, "PKColumn", out attribuleValue))
 						{
-							propertyInfo.TableColumnName = property.Attribute("PKColumn").Value;
+							propertyInfo.TableColumnName = attribuleValue;
 							propertyInfo.IsPKColumn = true;
 						}
-						if(property.Attribute("OutPut") != null && !string.IsNullOrEmpty(property.Attribute("OutPut").Value.Trim()))
+						else if(GetAttribuleValue(property, "OutPut", out attribuleValue))
 						{
-							propertyInfo.TableColumnName = property.Attribute("OutPut").Value.Trim();
+							propertyInfo.TableColumnName = attribuleValue;
 							propertyInfo.IsOutPutParamer = true;
 						}
+						else if(GetAttribuleValue(property, "Column", out attribuleValue))
+							propertyInfo.TableColumnName = attribuleValue;
 
-						if(property.Attribute("Column") != null)
-							propertyInfo.TableColumnName = property.Attribute("Column").Value.Trim();
-
-						if(property.Attribute("Join") != null && !string.IsNullOrEmpty(property.Attribute("Join").Value.Trim()))
+						if(GetAttribuleValue(property, "Join", out attribuleValue))
 						{
 							propertyInfo.IsFKColumn = true;
-							dicJoin.Add(string.Format("{0},{1}", info.ClassName, propertyInfo.ClassPropertyName), property.Attribute("Join").Value);
+							dicJoin.Add(string.Format("{0},{1}", info.ClassName, propertyInfo.ClassPropertyName), attribuleValue);
 
-							if(property.Attribute("Set") != null && !string.IsNullOrEmpty(property.Attribute("Set").Value.Trim()))
-								propertyInfo.SetClassPropertyName = property.Attribute("Set").Value.Trim();
+							if(GetAttribuleValue(property, "Set", out attribuleValue))
+								propertyInfo.SetClassPropertyName = attribuleValue;
 							else
 								throw new FormatException(string.Format("{0}.{1}节点Set属性未赋值", info.ClassName, propertyInfo.ClassPropertyName));
 						}
 
-						if(property.Attribute("Nullable") != null && !string.IsNullOrEmpty(property.Attribute("Nullable").Value.Trim()))
+						if(GetAttribuleValue(property, "Nullable", out attribuleValue))
 						{
 							bool flag;
-							propertyInfo.Nullable = bool.TryParse(property.Attribute("Nullable").Value, out flag) ? flag : false;
+							propertyInfo.Nullable = bool.TryParse(attribuleValue, out flag) ? flag : false;
 						}
 						else
 							propertyInfo.Nullable = false;
 
-						if(property.Attribute("DbType") != null && !string.IsNullOrEmpty(property.Attribute("DbType").Value.Trim()))
-							propertyInfo.DbType = property.Attribute("DbType").Value.Trim();
-						if(property.Attribute("Size") != null && !string.IsNullOrEmpty(property.Attribute("Size").Value.Trim()))
+						if(GetAttribuleValue(property, "DbType", out attribuleValue))
+							propertyInfo.DbType = attribuleValue;
+
+						if(GetAttribuleValue(property, "Size", out attribuleValue))
 						{
 							int size;
-							propertyInfo.Size = int.TryParse(property.Attribute("Size").Value.Trim(), out size) ? (int?)size : null;
+							propertyInfo.Size = int.TryParse(attribuleValue, out size) ? (int?)size : null;
 						}
-
-						if(string.IsNullOrEmpty(propertyInfo.TableColumnName))
-							propertyInfo.TableColumnName = propertyInfo.ClassPropertyName;
 
 						propertyInfo.Host = info;
 						info.PropertyInfoList.Add(propertyInfo);
@@ -218,6 +219,22 @@ namespace Automao.Data
 
 			path = Path.Combine(directory, path.Substring(index + 3));
 			return ParsePath(path);
+		}
+
+		private static bool GetAttribuleValue(XElement element, string name, out string value)
+		{
+			var attribule = element.Attribute(name);
+			if(attribule == null)
+			{
+				value = string.Empty;
+				return false;
+			}
+			value = attribule.Value.Trim();
+
+			if(string.IsNullOrWhiteSpace(value))
+				return false;
+
+			return true;
 		}
 	}
 }
