@@ -25,6 +25,7 @@
  */
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -78,12 +79,10 @@ namespace Automao.Data
 					values = new object[0];
 				else if(where.Value is object[])
 					values = (object[])where.Value;
-				else if(where.Value is Array)
-				{
-					var array = (Array)where.Value;
-					values = new object[array.Length];
-					array.CopyTo(values, 0);
-				}
+				else if(where.Value is IEnumerable<object>)
+					values = ((IEnumerable<object>)where.Value).ToArray();
+				else if(where.Value is IEnumerable)
+					values = ((IEnumerable)where.Value).Cast<object>().ToArray();
 				else
 					values = new[] { where.Value };
 
@@ -150,6 +149,10 @@ namespace Automao.Data
 					values = new object[0];
 				else if(where.Value is object[])
 					values = (object[])where.Value;
+				else if(where.Value is IEnumerable<object>)
+					values = ((IEnumerable<object>)where.Value).ToArray();
+				else if(where.Value is IEnumerable)
+					values = ((IEnumerable)where.Value).Cast<object>().ToArray();
 				else
 					values = new[] { where.Value };
 
