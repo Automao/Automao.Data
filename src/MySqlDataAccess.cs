@@ -43,9 +43,9 @@ namespace Automao.Data
 
 		#region 构造函数
 		public MySqlDataAccess()
-			: base(false, DbProviderFactories.GetFactory("MySql.Data.MySqlClient"))
+			: base(false, MySql.Data.MySqlClient.MySqlClientFactory.Instance)
 		{
-			_providerFactory = DbProviderFactories.GetFactory("MySql.Data.MySqlClient");
+			_providerFactory = MySql.Data.MySqlClient.MySqlClientFactory.Instance;
 		}
 		#endregion
 

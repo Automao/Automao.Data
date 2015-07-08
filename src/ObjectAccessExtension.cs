@@ -77,6 +77,8 @@ namespace Automao.Data
 				var where = (Condition)condition;
 				if(where.Value == null)
 					values = new object[0];
+				else if(where.Value is string || where.Value is byte[])
+					values = new[] { where.Value };
 				else if(where.Value is object[])
 					values = (object[])where.Value;
 				else if(where.Value is IEnumerable<object>)
@@ -147,6 +149,8 @@ namespace Automao.Data
 				var where = (Condition)clause;
 				if(where.Value == null)
 					values = new object[0];
+				else if(where.Value is string || where.Value is byte[])
+					values = new[] { where.Value };
 				else if(where.Value is object[])
 					values = (object[])where.Value;
 				else if(where.Value is IEnumerable<object>)
