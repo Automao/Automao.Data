@@ -22,14 +22,14 @@ namespace Automao.Data
 		#endregion
 
 		#region 构造函数
-		public ColumnInfo(string original, ClassInfo rootInfo, Dictionary<string, JoinInfo> joinInfoList, JoinInfo rootJoin)
+		public ColumnInfo(int joinStartIndex, string original, ClassInfo rootInfo, Dictionary<string, JoinInfo> joinInfoList, JoinInfo rootJoin)
 		{
 			_original = original;
 			_rootInfo = rootInfo;
 			_joinInfoList = joinInfoList;
 			_rootJoin = rootJoin;
 
-			Init();
+			Init(joinStartIndex);
 		}
 		#endregion
 
@@ -84,7 +84,7 @@ namespace Automao.Data
 		#endregion
 
 		#region 私有方法
-		private void Init()
+		private void Init(int joinStartIndex)
 		{
 			_classInfo = _rootInfo;
 			var temp = _original;
@@ -116,7 +116,7 @@ namespace Automao.Data
 						var parent = i == 0 ? _rootJoin : _joinInfoList[string.Join(".", list.Take(i))];
 						var joinColumns = parent.ClassInfo.PropertyInfoList.Where(p => p.IsFKColumn && p.SetClassPropertyName == list[i]).ToArray();
 
-						var joinInfo = new JoinInfo(parent, list[i], "J" + _joinInfoList.Count, _classInfo, joinColumns);
+						var joinInfo = new JoinInfo(parent, list[i], "J" + (_joinInfoList.Count + joinStartIndex), _classInfo, joinColumns);
 						_joinInfoList.Add(key, joinInfo);
 					}
 				}
@@ -129,6 +129,8 @@ namespace Automao.Data
 				_joinInfo = _rootJoin;
 				_field = temp;
 			}
+
+			joinStartIndex += _joinInfoList.Count;
 
 			_propertyInfo = _classInfo.PropertyInfoList.FirstOrDefault(p => p.ClassPropertyName == _field);
 		}

@@ -75,18 +75,7 @@ namespace Automao.Data
 			if(condition is Condition)
 			{
 				var where = (Condition)condition;
-				if(where.Value == null)
-					values = new object[0];
-				else if(where.Value is string || where.Value is byte[])
-					values = new[] { where.Value };
-				else if(where.Value is object[])
-					values = (object[])where.Value;
-				else if(where.Value is IEnumerable<object>)
-					values = ((IEnumerable<object>)where.Value).ToArray();
-				else if(where.Value is IEnumerable)
-					values = ((IEnumerable)where.Value).Cast<object>().ToArray();
-				else
-					values = new[] { where.Value };
+				values = GetValue(where);
 
 				if(!columnInfos.ContainsKey(where.Name))
 					throw new Exception(string.Format("未找到属性\"{0}\"的描述信息", where.Name));
@@ -94,7 +83,7 @@ namespace Automao.Data
 				var columnInfo = columnInfos[where.Name];
 				var pi = columnInfo.PropertyInfo;
 
-				var oper = where.Operator.Parse(values, ref startFormatIndex);
+				var oper = where.Operator.Parse(ref values, ref startFormatIndex);
 
 				var columnName = pi == null ? columnInfo.Field : pi.TableColumnName;
 
@@ -147,18 +136,7 @@ namespace Automao.Data
 			if(clause is Condition)
 			{
 				var where = (Condition)clause;
-				if(where.Value == null)
-					values = new object[0];
-				else if(where.Value is string || where.Value is byte[])
-					values = new[] { where.Value };
-				else if(where.Value is object[])
-					values = (object[])where.Value;
-				else if(where.Value is IEnumerable<object>)
-					values = ((IEnumerable<object>)where.Value).ToArray();
-				else if(where.Value is IEnumerable)
-					values = ((IEnumerable)where.Value).Cast<object>().ToArray();
-				else
-					values = new[] { where.Value };
+				values = GetValue(where);
 
 				var tuple = getTableEx(where.Name);
 
@@ -167,7 +145,7 @@ namespace Automao.Data
 
 				var pi = tuple.Item1.PropertyInfoList.FirstOrDefault(p => p.ClassPropertyName.Equals(property, StringComparison.OrdinalIgnoreCase));
 
-				var oper = where.Operator.Parse(values, ref startFormatIndex);
+				var oper = where.Operator.Parse(ref values, ref startFormatIndex);
 
 				var columnName = pi == null ? where.Name : pi.TableColumnName;
 
@@ -219,7 +197,7 @@ namespace Automao.Data
 			return null;
 		}
 
-		private static string Parse(this ConditionOperator clauseOperator, object[] values, ref int formatIndex)
+		private static string Parse(this ConditionOperator clauseOperator, ref object[] values, ref int formatIndex)
 		{
 			switch(clauseOperator)
 			{
@@ -243,7 +221,16 @@ namespace Automao.Data
 							return "";
 
 						if(values.Length == 1)
+						{
+							var value = values[0];
+							if(value is ObjectAccessResult)
+							{
+								var objectAccessResult = (ObjectAccessResult)value;
+								values = objectAccessResult.Values;
+								return string.Format("{0} ({1})", clauseOperator == ConditionOperator.NotIn ? "NOT IN" : "IN", objectAccessResult.ExecuteSql);
+							}
 							return string.Format("{0} {{{1}}}", clauseOperator == ConditionOperator.NotIn ? "!=" : "=", formatIndex++);
+						}
 
 						var list = new List<string>();
 						for(int i = 0; i < values.Length; i++)
@@ -393,6 +380,22 @@ namespace Automao.Data
 				clause.Add(new Condition(key, dic[key]));
 			}
 			return clause;
+		}
+
+		private static object[] GetValue(Condition where)
+		{
+			if(where.Value == null)
+				return new object[0];
+			else if(where.Value is string || where.Value is byte[] || where.Value is ObjectAccessResult)
+				return new[] { where.Value };
+			else if(where.Value is object[])
+				return (object[])where.Value;
+			else if(where.Value is IEnumerable<object>)
+				return ((IEnumerable<object>)where.Value).ToArray();
+			else if(where.Value is IEnumerable)
+				return ((IEnumerable)where.Value).Cast<object>().ToArray();
+			else
+				return new[] { where.Value };
 		}
 	}
 }

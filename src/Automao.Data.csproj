@@ -48,6 +48,7 @@
     <Compile Include="ClassInfo.cs" />
     <Compile Include="ClassPropertyInfo.cs" />
     <Compile Include="ColumnInfo.cs" />
+    <Compile Include="ObjectAccessResult.cs" />
     <Compile Include="JoinInfo.cs" />
     <Compile Include="MySqlDataAccess.cs" />
     <Compile Include="SqlExecuter.cs" />

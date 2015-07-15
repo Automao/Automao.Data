@@ -107,11 +107,43 @@ namespace Automao.Data
 			if(classInfo == null)
 				throw new Exception(string.Format("未找到{0}对应的mapping节点", name));
 
+			object[] values;
+			int joinStartIndex;
+			EachCondition(condition, out joinStartIndex, out values);
+
+			int valueCount = values.Length;
+			var rootJoin = new JoinInfo(null, "", values.Length > 0 ? "T1" : "T", classInfo, null);
+			string countSql;
+			var sql = CreateSelectSql(rootJoin, classInfo, condition, members, paging, grouping, sorting, ref joinStartIndex, ref valueCount, out countSql, out values);
+
+			if(!string.IsNullOrEmpty(countSql))
+			{
+				var tablevalues = this.Executer.Select(countSql, CreateParameters(0, values));
+
+				if(tablevalues != null)
+				{
+					var item = tablevalues.FirstOrDefault();
+					paging.TotalCount = Convert.ToInt32(item.Values.First());
+				}
+			}
+
+			return new ObjectAccessResult<T>(joinStartIndex, values, sql, () =>
+			{
+
+				var tablevalues = this.Executer.Select(sql, this.CreateParameters(0, values));
+
+				var result = this.SetEntityValue<T>(tablevalues, rootJoin);
+
+				return result;
+			});
+		}
+
+		internal string CreateSelectSql(JoinInfo rootJoin, ClassInfo classInfo, ICondition condition, string[] members, Paging paging, Grouping grouping, Sorting[] sorting, ref int joinStartIndex, ref int valueCount, out string countSql, out object[] values)
+		{
 			#region 构建所有列
 			var joinInfos = new Dictionary<string, JoinInfo>();
 			var allColumnInfos = new Dictionary<string, ColumnInfo>();
 			var selectColumnInfos = new Dictionary<string, ColumnInfo>();
-			var rootJoin = new JoinInfo(null, "", "T", classInfo, null);
 
 			var conditionNames = GetConditionName(condition) ?? new string[0];
 			IEnumerable<string> allColumns = conditionNames;
@@ -139,9 +171,11 @@ namespace Automao.Data
 				if(allColumnInfos.ContainsKey(item))
 					continue;
 
-				var columnInfo = new ColumnInfo(item, classInfo, joinInfos, rootJoin);
+				var columnInfo = new ColumnInfo(joinStartIndex, item, classInfo, joinInfos, rootJoin);
 				allColumnInfos.Add(item, columnInfo);
 			}
+
+			joinStartIndex += joinInfos.Count;
 			#endregion
 
 			Func<ColumnInfo, bool> predicate = (p =>
@@ -161,8 +195,8 @@ namespace Automao.Data
 			#endregion
 
 			#region where
-			int startFormatIndex = 0;
-			object[] values;
+			int startFormatIndex = valueCount;
+
 			var where = "WHERE {0}".FormatWhere(condition, allColumnInfos, _caseSensitive, ref startFormatIndex, out values);
 			#endregion
 
@@ -235,25 +269,15 @@ namespace Automao.Data
 			var sql = CreateSelectSql(classInfo.TableName, rootJoin.TableEx, newTableNameEx, columns, where, join,
 				group, having, groupedSelectColumns, groupedJoin, orderby, paging);
 
-			var tablevalues = this.Executer.Select(sql, CreateParameters(0, values));
-
-			var result = SetEntityValue<T>(tablevalues, rootJoin);
-
 			if(paging != null && paging.TotalCount == 0)
 			{
-				sql = CreateSelectSql(classInfo.TableName, rootJoin.TableEx, newTableNameEx, grouping == null ? "COUNT(0)" : columns, where, join,
+				countSql = CreateSelectSql(classInfo.TableName, rootJoin.TableEx, newTableNameEx, grouping == null ? "COUNT(0)" : columns, where, join,
 					group, having, grouping == null ? null : "COUNT(0)", groupedJoin, null, null);
-
-				tablevalues = this.Executer.Select(sql, CreateParameters(0, values));
-
-				if(tablevalues != null)
-				{
-					var item = tablevalues.FirstOrDefault();
-					paging.TotalCount = Convert.ToInt32(item.Values.First());
-				}
 			}
+			else
+				countSql = string.Empty;
 
-			return result;
+			return sql;
 		}
 
 		protected abstract string CreateSelectSql(string tableName, string tableNameEx, string newTableNameEx, string columns, string where, string join, string group, string having, string groupedSelectColumns, string groupedJoin, string orderby, Paging paging);
@@ -279,7 +303,7 @@ namespace Automao.Data
 				if(allColumnInfos.ContainsKey(item))
 					continue;
 
-				var columnInfo = new ColumnInfo(item, info, joinInfos, rootJoin);
+				var columnInfo = new ColumnInfo(0, item, info, joinInfos, rootJoin);
 				allColumnInfos.Add(item, columnInfo);
 			}
 
@@ -648,7 +672,10 @@ namespace Automao.Data
 				return null;
 
 			if(condition is Condition)
-				return new[] { ((Condition)condition).Name };
+			{
+				var where = (Condition)condition;
+				return new[] { where.Name };
+			}
 			else
 			{
 				var list = new List<string>();
@@ -658,6 +685,41 @@ namespace Automao.Data
 				}
 
 				return list.ToArray();
+			}
+		}
+
+		private void EachCondition(ICondition condition, out int joinStartIndex, out object[] values)
+		{
+			joinStartIndex = 0;
+			values = new object[0];
+
+			if(condition == null)
+				return;
+
+			if(condition is Condition)
+			{
+				var where = (Condition)condition;
+				if(where.Value is ObjectAccessResult)
+				{
+					var result = (ObjectAccessResult)where.Value;
+					joinStartIndex = result.JoinStartIndex;
+					values = result.Values;
+				}
+			}
+			else
+			{
+				var tempValues = new List<object>();
+
+				foreach(var item in (ConditionCollection)condition)
+				{
+					int index;
+					object[] vs;
+					EachCondition(item, out index, out vs);
+					joinStartIndex += index;
+					tempValues.AddRange(vs);
+				}
+
+				values = tempValues.ToArray();
 			}
 		}
 
