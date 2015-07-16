@@ -548,7 +548,7 @@ namespace Automao.Data
 					var property = type.GetProperty(item.Property);
 
 					var dic = values.Where(p => p.Key.StartsWith(item.TableEx + "_")).ToDictionary(p => p.Key.Substring(item.TableEx.Length + 1), p => p.Value);
-					if(dic == null || dic.Count == 0)
+					if(dic == null || dic.Count == 0 || dic.All(p => p.Value is System.DBNull))
 						continue;
 
 					var value = CreateEntity<object>(item.ClassInfo.EntityType, dic, item.ClassInfo);
