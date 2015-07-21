@@ -577,16 +577,22 @@ namespace Automao.Data
 				var type = entity.GetType();
 				foreach(var item in root.Joins)
 				{
-					var property = type.GetProperty(item.JoinInfo.Name);
-
 					var dic = values.Where(p => p.Key.StartsWith(item.Target.AsName + "_")).ToDictionary(p => p.Key.Substring(item.Target.AsName.Length + 1), p => p.Value);
 					if(dic == null || dic.Count == 0 || dic.All(p => p.Value is System.DBNull))
 						continue;
+
+					if(IsDictionary(type))
+					{
+						((IDictionary)entity).Add(item.JoinInfo.Name, dic);
+						SetNavigationProperty(item.Target, entity, values);
+						continue;
+					}
 
 					var value = CreateEntity<object>(item.Target.ClassNode.EntityType, dic, item.Target.ClassNode);
 
 					SetNavigationProperty(item.Target, value, values);
 
+					var property = type.GetProperty(item.JoinInfo.Name);
 					property.SetValue(entity, value);
 				}
 			}
@@ -594,9 +600,7 @@ namespace Automao.Data
 
 		protected T CreateEntity<T>(Type entityType, Dictionary<string, object> propertyValues, ClassNode info)
 		{
-			if(!entityType.IsSubclassOf(typeof(Dictionary<string, object>))
-				&& (entityType.IsSubclassOf(typeof(IDictionary<string, object>))
-				|| entityType.IsSubclassOf(typeof(IDictionary))))
+			if(IsDictionary(entityType))
 				return (T)(object)propertyValues;
 
 			System.Reflection.ParameterInfo[] cpinfo = null;
@@ -770,6 +774,17 @@ namespace Automao.Data
 
 				values = tempValues.ToArray();
 			}
+		}
+
+		private bool IsDictionary(Type type)
+		{
+			if(type.IsSubclassOf(typeof(Dictionary<string, object>)))
+				return false;
+
+			return type == typeof(IDictionary<string, object>)
+				|| type == typeof(IDictionary)
+				|| type.IsSubclassOf(typeof(IDictionary<string, object>))
+				|| type.IsSubclassOf(typeof(IDictionary));
 		}
 		#endregion
 	}
