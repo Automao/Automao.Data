@@ -127,7 +127,7 @@ namespace Automao.Data.Mapping
 			if(MappingInfo.GetAttribuleValue(join, "mode", out attribuleValue))
 			{
 				JoinType temp;
-				joinPropertyInfo._type = Enum.TryParse(attribuleValue, out temp) ? temp : JoinType.Inner;
+				joinPropertyInfo._type = Zongsoft.Common.Convert.TryConvertValue<JoinType>(attribuleValue, out temp) ? temp : JoinType.Inner;
 			}
 
 			foreach(var relation in join.Elements())
