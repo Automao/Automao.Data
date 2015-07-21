@@ -1,27 +1,50 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
-<xml>
-	<VehicleBrand Table="VehicleBrand" Assembly="Automao.Common.Models.VehicleBrand,Automao.Common">
-		<BrandId PKColumn="BrandId"/>
-	</VehicleBrand>
+<schema>
+	<entity name="VehicleBrand" table="VehicleBrand" type="Automao.Common.Models.VehicleBrand,Automao.Data.Tests">
+		<key>
+			<property name="BrandId"/>
+		</key>
+	</entity>
 
-	<VehicleSeriesGroup Table="VehicleSeriesGroup" Assembly="Automao.Common.Models.VehicleSeriesGroup,Automao.Common">
-		<BrandId PKColumn="BrandId" Join="VehicleBrand" Set="Brand"/>
-		<GroupId PKColumn="GroupId"/>
+	<VehicleSeriesGroup table="VehicleSeriesGroup" type="Automao.Common.Models.VehicleSeriesGroup,Automao.Data.Tests">
+		<key>
+			<property name="BrandId"/>
+			<property name="GroupId"/>
+		</key>
+		<property name="Brand" relationTo="VehicleBrand">
+			<join mode="inner">
+				<member from="BrandId" to="BrandId"/>
+			</join>
+		</property>
 	</VehicleSeriesGroup>
 
-	<VehicleSeries Table="VehicleSeries" Assembly="Automao.Common.Models.VehicleSeries,Automao.Common">
-		<BrandId PKColumn="BrandId"/>
-		<SeriesId PKColumn="SeriesId"/>
-		<GroupId Column="GroupId" Join="VehicleSeriesGroup.GroupId" Set="Group"/>
+	<VehicleSeries table="VehicleSeries" type="Automao.Common.Models.VehicleSeries,Automao.Data.Tests" base="">
+		<key>
+			<property name="BrandId"/>
+			<property name="SeriesId"/>
+		</key>
+		<property name="Group" relationTo="VehicleSeriesGroup">
+			<join mode="inner">
+				<member from="GroupId" to="GroupId"/>
+			</join>
+		</property>
 	</VehicleSeries>
 
-	<VehicleModel Table="VehicleModel" Assembly="Automao.Common.Models.VehicleModel,Automao.Common">
-		<ModelNo PKColumn="ModelNo"/>
-		<SeriesId Column="SeriesId" Join="VehicleSeries.SeriesId" Set="Series"/>
-	</VehicleModel>
+	<object name="VehicleModel" table="VehicleModel" type="Automao.Common.Models.VehicleModel,Automao.Data.Tests">
+		<key>
+			<property name="ModelNo"/>
+		</key>
+		<property name="Series" relationTo="VehicleSeries">
+			<join mode="inner">
+				<member from="SeriesId" to="SeriesId"/>
+			</join>
+		</property>
+	</object>
 
-	<Department Table="Department" Assembly="Automao.Common.Models.Department,Automao.Common">
-		<DepartmentId PKColumn="DepartmentId"/>
-		<CorporationId PKColumn="CorporationId"/>
+	<Department table="Department" type="Automao.Common.Models.Department,Automao.Data.Tests">
+		<key>
+			<property name="DepartmentId"/>
+			<property name="CorporationId"/>
+		</key>
 	</Department>
-</xml>
+</schema>

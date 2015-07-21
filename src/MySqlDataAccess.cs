@@ -38,14 +38,12 @@ namespace Automao.Data
 	{
 		#region 字段
 		private Dictionary<string, DbType> _dbTypes;
-		private DbProviderFactory _providerFactory;
 		#endregion
 
 		#region 构造函数
 		public MySqlDataAccess()
 			: base(false, MySql.Data.MySqlClient.MySqlClientFactory.Instance)
 		{
-			_providerFactory = MySql.Data.MySqlClient.MySqlClientFactory.Instance;
 		}
 		#endregion
 
@@ -62,9 +60,30 @@ namespace Automao.Data
 		#endregion
 
 		#region 重写方法
-		protected override string CreateSelectSql(string tableName, string tableNameEx, string newTableNameEx, string columns, string where, string join, string group, string having, string groupedSelectColumns, string groupedJoin, string orderby, Paging paging)
+		protected override string CreateSelectSql(ClassInfo info, string columns, string where, string join, string orderby, Paging paging)
 		{
-			var sql = string.Format("SELECT {0} FROM {1} {2}", columns, tableName, tableNameEx);
+			var sql = string.Format("SELECT {0} FROM {1} {2}", columns, info.ClassNode.GetTableName(false), info.AsName);
+			if(!string.IsNullOrEmpty(join))
+				sql += " " + join;
+			if(!string.IsNullOrEmpty(where))
+				sql += " " + where;
+
+			if(!string.IsNullOrEmpty(orderby))
+				sql += " " + orderby;
+
+			if(paging != null)
+			{
+				if(paging.PageIndex < 1)
+					paging.PageIndex = 1;
+				sql += string.Format(" LIMIT {0},{1}", paging.PageSize * (paging.PageIndex - 1), paging.PageSize);
+			}
+
+			return sql;
+		}
+
+		protected override string CreateSelectSql(ClassInfo info, string newTableNameEx, string columns, string where, string join, string group, string having, string groupedSelectColumns, string groupedJoin, string orderby, Paging paging)
+		{
+			var sql = string.Format("SELECT {0} FROM {1} {2}", columns, info.ClassNode.GetTableName(false), info.AsName);
 			if(!string.IsNullOrEmpty(join))
 				sql += " " + join;
 			if(!string.IsNullOrEmpty(where))
@@ -78,7 +97,7 @@ namespace Automao.Data
 
 			if(!string.IsNullOrEmpty(groupedSelectColumns))
 			{
-				var newColumns = groupedSelectColumns.Replace(tableNameEx + ".", newTableNameEx + ".").Replace(tableNameEx + "_", newTableNameEx + "_");
+				var newColumns = groupedSelectColumns.Replace(info.AsName + ".", newTableNameEx + ".").Replace(info.AsName + "_", newTableNameEx + "_");
 				sql = string.Format("select {0} {1} from ({2}) {3}", newColumns.Equals("count(0)", StringComparison.OrdinalIgnoreCase) ? "" : string.Format("{0}.*,", newTableNameEx), newColumns, sql, newTableNameEx);
 				if(!string.IsNullOrEmpty(groupedJoin))
 					sql += " " + groupedJoin;
@@ -87,7 +106,7 @@ namespace Automao.Data
 			if(!string.IsNullOrEmpty(orderby))
 			{
 				if(!string.IsNullOrEmpty(groupedSelectColumns))
-					sql += " " + orderby.Replace(tableNameEx + ".", newTableNameEx + ".").Replace(tableNameEx + "_", newTableNameEx + "_");
+					sql += " " + orderby.Replace(info.AsName + ".", newTableNameEx + ".").Replace(info.AsName + "_", newTableNameEx + "_");
 				else
 					sql += " " + orderby;
 			}
@@ -104,7 +123,8 @@ namespace Automao.Data
 
 		internal override DbParameter CreateParameter(int index, object value, string dbType = null, string name = null, bool isOutPut = false, bool isInOutPut = false, int? size = null, bool isProcedure = false)
 		{
-			var paramer = _providerFactory.CreateParameter();
+			var paramer = new MySql.Data.MySqlClient.MySqlParameter();
+
 			paramer.ParameterName = string.IsNullOrEmpty(name) ? ("p" + index) : name;
 			if(!isProcedure)
 				paramer.ParameterName = "@" + paramer.ParameterName;

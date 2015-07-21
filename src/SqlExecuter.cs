@@ -37,30 +37,47 @@ using Automao.Data.Options.Configuration;
 
 namespace Automao.Data
 {
-	internal class SqlExecuter
+	internal class SqlExecuter : IEnlistment, IDisposable
 	{
 		#region 字段
-		private IEnlistment _enlistment;
+		private const string _connection_ArgumentsKey = "DbConnection";
+		private const string _transaction_ArgumentsKey = "DbTransaction";
+		private static SqlExecuter _current = new SqlExecuter();
+		private System.Data.Common.DbProviderFactory _dbProviderFactory;
+		private string _connectionString;
+		private System.Data.Common.DbConnection _keepConnection;
+		private bool _needKeepConnection;
 		#endregion
 
 		#region 构造函数
-		public SqlExecuter(IEnlistment enlistment)
+		private SqlExecuter()
 		{
-			_enlistment = enlistment;
 		}
 		#endregion
 
 		#region 属性
+		public static SqlExecuter Current
+		{
+			get
+			{
+				return _current;
+			}
+		}
+
 		public DbProviderFactory DbProviderFactory
 		{
-			get;
-			set;
+			set
+			{
+				_dbProviderFactory = value;
+			}
 		}
 
 		public string ConnectionString
 		{
-			get;
-			set;
+			set
+			{
+				_connectionString = value;
+			}
 		}
 
 		private DbConnection DbConnection
@@ -68,30 +85,41 @@ namespace Automao.Data
 			get
 			{
 				var transaction = Transaction.Current;
-				DbConnection connection;
 				if(transaction != null)
 				{
-					connection = transaction.Information.Arguments["DbConnection"] as DbConnection;
+					var connection = transaction.Information.Arguments[_connection_ArgumentsKey] as DbConnection;
 					if(connection == null)
 					{
 						//创建一个新的数据连接对象
-						connection = DbProviderFactory.CreateConnection();
-						connection.ConnectionString = ConnectionString;
-						//打开当前数据连接
-						connection.Open();
+						connection = _dbProviderFactory.CreateConnection();
+						connection.ConnectionString = _connectionString;
 						//设置当前事务的环境参数
-						transaction.Information.Arguments["DbConnection"] = connection;
-						transaction.Information.Arguments["DbTransaction"] = connection.BeginTransaction();
+						transaction.Information.Arguments[_connection_ArgumentsKey] = connection;
 
-						transaction.Enlist(_enlistment);
+						var isolationLevel = Parse(transaction.IsolationLevel);
+						var dbTransaction = connection.BeginTransaction(isolationLevel);
+						transaction.Information.Arguments[_transaction_ArgumentsKey] = dbTransaction;
+
+						transaction.Enlist(this);
 					}
+					return connection;
+				}
+
+				if(_needKeepConnection)
+				{
+					if(_keepConnection == null)
+					{
+						_keepConnection = _dbProviderFactory.CreateConnection();
+						_keepConnection.ConnectionString = _connectionString;
+					}
+					return _keepConnection;
 				}
 				else
 				{
-					connection = DbProviderFactory.CreateConnection();
-					connection.ConnectionString = ConnectionString;
+					var connection = _dbProviderFactory.CreateConnection();
+					connection.ConnectionString = _connectionString;
+					return connection;
 				}
-				return connection;
 			}
 		}
 
@@ -101,12 +129,30 @@ namespace Automao.Data
 			{
 				var transaction = Transaction.Current;
 				if(transaction != null)
-					return transaction.Information.Arguments["DbTransaction"] as DbTransaction;
+					return transaction.Information.Arguments[_transaction_ArgumentsKey] as DbTransaction;
 				return null;
 			}
 		}
 		#endregion
 
+		#region 公共方法
+		public SqlExecuter Keep()
+		{
+			var executer = new SqlExecuter();
+			executer._needKeepConnection = true;
+			executer._dbProviderFactory = _dbProviderFactory;
+			executer._connectionString = _connectionString;
+			return executer;
+		}
+
+		public void Dispose()
+		{
+			if(_keepConnection != null)
+				_keepConnection.Dispose();
+		}
+		#endregion
+
+		#region Execute
 		/// <summary>
 		/// 执行查找操作
 		/// </summary>
@@ -119,16 +165,23 @@ namespace Automao.Data
 				throw new ArgumentNullException("formatSql");
 
 			var connection = DbConnection;
-			var falg = Transaction.Current == null;
 
 			using(var command = connection.CreateCommand())
 			{
 				command.CommandText = string.Format(sql, parameters.Select(p => (object)p.ParameterName).ToArray());
 				command.Parameters.AddRange(parameters);
 
+				var transaction = DbTransaction;
+				var startTransaction = transaction != null;
+				if(startTransaction)
+					command.Transaction = transaction;
+
+				if(connection.State == ConnectionState.Broken)
+					throw new System.Data.DataException("connection state is broken");
+
 				try
 				{
-					if(falg)
+					if(connection.State == ConnectionState.Closed)
 						connection.Open();
 
 					using(var reader = command.ExecuteReader())
@@ -146,7 +199,7 @@ namespace Automao.Data
 				}
 				finally
 				{
-					if(falg)
+					if(!startTransaction && !_needKeepConnection)
 						connection.Close();
 				}
 			}
@@ -163,23 +216,34 @@ namespace Automao.Data
 				throw new ArgumentNullException("formatSql");
 
 			var connection = DbConnection;
-			var falg = Transaction.Current == null;
 
 			using(var command = connection.CreateCommand())
 			{
 				command.CommandText = string.Format(sql, parameters.Select(p => (object)p.ParameterName).ToArray());
 				command.Parameters.AddRange(parameters);
 
+				var transaction = DbTransaction;
+				var startTransaction = transaction != null;
+				if(startTransaction)
+					command.Transaction = transaction;
+
+				if(connection.State == ConnectionState.Broken)
+					throw new System.Data.DataException("connection state is broken");
+
 				try
 				{
-					if(falg)
+					if(connection.State == ConnectionState.Closed)
 						connection.Open();
-
+#if DEBUG
+					var result = command.ExecuteScalar();
+					return result;
+#else
 					return command.ExecuteScalar();
+#endif
 				}
 				finally
 				{
-					if(falg)
+					if(!startTransaction && !_needKeepConnection)
 						connection.Close();
 				}
 			}
@@ -197,27 +261,34 @@ namespace Automao.Data
 				throw new ArgumentNullException("formatSql");
 
 			var connection = DbConnection;
-			var flag = Transaction.Current == null;
 
 			using(var command = connection.CreateCommand())
 			{
 				command.CommandText = string.Format(sql, parameters.Select(p => (object)p.ParameterName).ToArray());
 				command.Parameters.AddRange(parameters);
 
-				if(DbTransaction != null)
-					command.Transaction = DbTransaction;
+				var transaction = DbTransaction;
+				var startTransaction = transaction != null;
+				if(startTransaction)
+					command.Transaction = transaction;
+
+				if(connection.State == ConnectionState.Broken)
+					throw new System.Data.DataException("connection state is broken");
 
 				try
 				{
-					if(flag)
+					if(connection.State == ConnectionState.Closed)
 						connection.Open();
-
+#if DEBUG
 					var i = command.ExecuteNonQuery();
 					return i;
+#else
+					return command.ExecuteNonQuery();
+#endif
 				}
 				finally
 				{
-					if(flag)
+					if(!startTransaction && !_needKeepConnection)
 						connection.Close();
 				}
 			}
@@ -237,7 +308,8 @@ namespace Automao.Data
 
 			var table = new DataTable();
 
-			var connection = DbConnection;
+			var connection = _dbProviderFactory.CreateConnection();
+			connection.ConnectionString = _connectionString;
 
 			using(var command = connection.CreateCommand())
 			{
@@ -246,7 +318,7 @@ namespace Automao.Data
 
 				command.Parameters.AddRange(parameters);
 
-				using(var adapter = DbProviderFactory.CreateDataAdapter())
+				using(var adapter = _dbProviderFactory.CreateDataAdapter())
 				{
 					adapter.SelectCommand = command;
 					adapter.Fill(table);
@@ -264,7 +336,44 @@ namespace Automao.Data
 
 			return table.Rows.Cast<DataRow>().Select(r => columns.ToDictionary(c => c.ColumnName, c => r[c])).ToArray();
 		}
+		#endregion
 
+		#region IEnlistment成员
+		public void OnEnlist(EnlistmentContext context)
+		{
+			var transaction = DbTransaction;
+			if(transaction == null)
+				return;
+
+			var connection = DbConnection;
+			switch(context.Phase)
+			{
+				case EnlistmentPhase.Commit:
+					transaction.Commit();
+					if(connection != null)
+					{
+						connection.Close();
+						connection.Dispose();
+					}
+					break;
+				case EnlistmentPhase.Prepare:
+					break;
+				case EnlistmentPhase.Abort:
+				case EnlistmentPhase.Rollback:
+					transaction.Rollback();
+					if(connection != null)
+					{
+						connection.Close();
+						connection.Dispose();
+					}
+					break;
+				default:
+					break;
+			}
+		}
+		#endregion
+
+		#region 静态方法
 		public static object ConvertValue(object value)
 		{
 			if(value == null)
@@ -309,6 +418,24 @@ namespace Automao.Data
 			}
 
 			return value;
+		}
+		#endregion
+
+		private System.Data.IsolationLevel Parse(Zongsoft.Transactions.IsolationLevel level)
+		{
+			switch(level)
+			{
+				case Zongsoft.Transactions.IsolationLevel.ReadCommitted:
+					return System.Data.IsolationLevel.ReadCommitted;
+				case Zongsoft.Transactions.IsolationLevel.ReadUncommitted:
+					return System.Data.IsolationLevel.ReadUncommitted;
+				case Zongsoft.Transactions.IsolationLevel.RepeatableRead:
+					return System.Data.IsolationLevel.RepeatableRead;
+				case Zongsoft.Transactions.IsolationLevel.Serializable:
+					return System.Data.IsolationLevel.Serializable;
+				default:
+					return System.Data.IsolationLevel.ReadCommitted;
+			}
 		}
 	}
 }

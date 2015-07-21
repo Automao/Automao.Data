@@ -46,14 +46,19 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ClassInfo.cs" />
-    <Compile Include="ClassPropertyInfo.cs" />
+    <Compile Include="Mapping\ClassNode.cs" />
+    <Compile Include="Mapping\PropertyNode.cs" />
     <Compile Include="ColumnInfo.cs" />
+    <Compile Include="Mapping\JoinPropertyNode.cs" />
+    <Compile Include="JoinType.cs" />
     <Compile Include="ObjectAccessResult.cs" />
     <Compile Include="JoinInfo.cs" />
     <Compile Include="MySqlDataAccess.cs" />
+    <Compile Include="Mapping\ProcedureNode.cs" />
+    <Compile Include="Mapping\ProcedureParameterNode.cs" />
     <Compile Include="SqlExecuter.cs" />
     <Compile Include="ExpressionEx.cs" />
-    <Compile Include="MappingInfo.cs" />
+    <Compile Include="Mapping\MappingInfo.cs" />
     <Compile Include="ObjectAccess.cs" />
     <Compile Include="ObjectAccessExtension.cs" />
     <Compile Include="Options\Configuration\GeneralOption.cs" />

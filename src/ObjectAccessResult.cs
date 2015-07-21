@@ -15,11 +15,13 @@ namespace Automao.Data
 		private int _joinStartIndex;
 		private object[] _values;
 		private string _executeSql;
+		private int _index;
 		#endregion
 
 		#region 构造函数
-		public ObjectAccessResult(int joinStartIndex, object[] values,string executeSql)
+		public ObjectAccessResult(int index, int joinStartIndex, object[] values, string executeSql)
 		{
+			_index = index;
 			_joinStartIndex = joinStartIndex;
 			_values = values;
 			_executeSql = executeSql;
@@ -27,6 +29,14 @@ namespace Automao.Data
 		#endregion
 
 		#region 属性
+		public int Index
+		{
+			get
+			{
+				return _index;
+			}
+		}
+
 		public int JoinStartIndex
 		{
 			get
@@ -62,13 +72,15 @@ namespace Automao.Data
 		#region 字段
 		private IEnumerator _enumerator;
 		private Func<IEnumerable<T>> _getResult;
+		private int _index;
 		#endregion
 
 		#region 构造函数
-		public ObjectAccessResult(int joinStartIndex, object[] values, string executeSql, Func<IEnumerable<T>> getResult)
-			: base(joinStartIndex, values, executeSql)
+		public ObjectAccessResult(int index, int joinStartIndex, object[] values, string executeSql, Func<IEnumerable<T>> getResult)
+			: base(index,joinStartIndex, values, executeSql)
 		{
 			_getResult = getResult;
+			_index = index;
 		}
 		#endregion
 

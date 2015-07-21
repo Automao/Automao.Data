@@ -3,103 +3,68 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Automao.Data.Mapping;
 
 namespace Automao.Data
 {
-
-	/// <summary>
-	/// 类详情
-	/// </summary>
 	public class ClassInfo
 	{
-		private Type _entityType;
-		/// <summary>
-		/// 类信息
-		/// </summary>
-		public string Assembly
+		private string _asName;
+		private string _as;
+		private int _asIndex;
+		private Mapping.ClassNode _classNode;
+		private List<Join> _joins;
+
+		public ClassInfo(string @as, int asIndex, ClassNode classNode)
 		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 类名
-		/// </summary>
-		public string ClassName
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 表名
-		/// </summary>
-		public string TableName
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 是否是存储过程
-		/// </summary>
-		public bool IsProcedure
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// 属性集合
-		/// </summary>
-		public List<ClassPropertyInfo> PropertyInfoList
-		{
-			get;
-			set;
+			_as = @as;
+			_classNode = classNode;
+			_joins = new List<Join>();
+
+			_asIndex = asIndex;
+			_asName = @as;
+			if(_asIndex > 0)
+				_asName += _asIndex.ToString();
 		}
 
-		/// <summary>
-		/// 所在文件路径
-		/// </summary>
-		public string MappingFileFullName
-		{
-			get;
-			set;
-		}
-
-		public Type EntityType
+		public ClassNode ClassNode
 		{
 			get
 			{
-				if(_entityType == null)
-					_entityType = GetEntityType();
-				return _entityType;
+				return _classNode;
 			}
 		}
 
-		public string GetColumn(string name)
+		public List<Join> Joins
 		{
-			var array = name.Split(',').ToList();
-			if(array.Count > 1)
+			get
 			{
-				var propertyInfo = PropertyInfoList.FirstOrDefault(p => p.IsFKColumn && p.SetClassPropertyName.Equals(array[0], StringComparison.OrdinalIgnoreCase));
-				if(propertyInfo != null)
-				{
-					array.RemoveAt(0);
-					return propertyInfo.Join.GetColumn(string.Join(".", array));
-				}
+				return _joins;
 			}
-
-			var pi = PropertyInfoList.FirstOrDefault(p => p.ClassPropertyName.Equals(name, StringComparison.OrdinalIgnoreCase));
-			if(pi != null)
-				return pi.TableColumnName;
-			return name;
 		}
 
-		private Type GetEntityType()
+		public string AsName
 		{
-			if(string.IsNullOrEmpty(Assembly))
-				throw new Exception(string.Format("当前节点({0})的Assembly为空", ClassName));
-			var entityType = Type.GetType(Assembly);
-			if(entityType == null)
-				throw new Exception(string.Format("当前节点({0})的Assembly出错", ClassName));
-			return entityType;
+			get
+			{
+				return _asName;
+			}
+		}
+
+		public string As
+		{
+			get
+			{
+				return _as;
+			}
+		}
+
+		public int AsIndex
+		{
+			get
+			{
+				return _asIndex;
+			}
 		}
 	}
 }
