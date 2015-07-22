@@ -15,7 +15,6 @@ namespace Automao.Data
 		private PropertyNode _propertyNode;
 		private string _aggregateFunctionName;//聚合函数名称
 		private string _selectColumn;
-		private string _columnEx;
 		private string _subAsName;
 		#endregion
 
@@ -81,7 +80,7 @@ namespace Automao.Data
 				asName += ".";
 
 			var columnformat = caseSensitive ? "{0}\"{1}\"" : "{0}{1}";
-			var field = _propertyNode != null ? _propertyNode.Column : _field;
+			var field = PropertyNode != null ? _propertyNode.Column : _field;
 
 			if(field.Equals("count(0)", System.StringComparison.OrdinalIgnoreCase))
 				return "COUNT(0)";
@@ -101,7 +100,7 @@ namespace Automao.Data
 				asName += ".";
 
 			var columnformat = caseSensitive ? "{0}\"{1}\"" : "{0}{1}";
-			var field = _propertyNode != null ? _propertyNode.Column : _field;
+			var field = PropertyNode != null ? _propertyNode.Column : _field;
 			if(field.Equals("count(0)", System.StringComparison.OrdinalIgnoreCase))
 				return "COUNT(0)";
 			else if(!string.IsNullOrEmpty(_aggregateFunctionName))
@@ -113,20 +112,17 @@ namespace Automao.Data
 
 		public string GetColumnEx(bool caseSensitive)
 		{
-			if(!string.IsNullOrEmpty(_columnEx))
-				return _columnEx;
-
 			var asName = string.IsNullOrEmpty(_subAsName) ? _classInfo.AsName : _subAsName;
 
 			var columnformat = caseSensitive ? "\"{0}_{1}\"" : "{0}_{1}";
-			var field = _propertyNode != null ? _propertyNode.Column : _field;
+			var field = PropertyNode != null ? _propertyNode.Column : _field;
+
 			if(field.Equals("count(0)", System.StringComparison.OrdinalIgnoreCase))
 				return string.Format(caseSensitive ? "\"{0}_Count\"" : "{0}_Count", asName);
 			else if(!string.IsNullOrEmpty(_aggregateFunctionName))
 				return string.Format(caseSensitive ? "\"{1}_{0}_{2}\"" : "{1}_{0}_{2}", _aggregateFunctionName.ToUpper(), asName, field);
 
-			_columnEx = string.Format(columnformat, asName, field);
-			return _columnEx;
+			return string.Format(columnformat, asName, field);
 		}
 		#endregion
 
