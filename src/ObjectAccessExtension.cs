@@ -36,15 +36,15 @@ namespace Automao.Data
 {
 	public static class ObjectAccessExtension
 	{
-		internal static string ToWhere(this ICondition condition, Dictionary<string, ColumnInfo> columnInfos, bool caseSensitive, ref int startFormatIndex, out object[] values, string format = "WHERE {0}")
+		internal static string ToWhere(this ICondition condition, Dictionary<string, ColumnInfo> columnInfos, bool caseSensitive, ref int tableIndex, ref int joinStartIndex, ref int valueIndex, out object[] values, string format = "WHERE {0}")
 		{
-			var where = Resolve(condition, columnInfos, caseSensitive, ref startFormatIndex, out values);
+			var where = Resolve(condition, columnInfos, caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
 			if(string.IsNullOrEmpty(where))
 				return "";
 			return string.Format(format, where);
 		}
 
-		private static string Resolve(ICondition condition, Dictionary<string, ColumnInfo> columnInfos, bool caseSensitive, ref int startFormatIndex, out object[] values)
+		private static string Resolve(ICondition condition, Dictionary<string, ColumnInfo> columnInfos, bool caseSensitive, ref int tableIndex, ref int joinStartIndex, ref int valueIndex, out object[] values)
 		{
 			if(condition is Condition)
 			{
@@ -56,7 +56,7 @@ namespace Automao.Data
 
 				var columnInfo = columnInfos[where.Name];
 
-				var oper = where.Operator.Parse(ref values, ref startFormatIndex);
+				var oper = where.Operator.Parse(ref values, ref tableIndex, ref joinStartIndex, ref valueIndex);
 
 				if(string.IsNullOrEmpty(oper))
 					return string.Format("{0} != {0}", columnInfo.ToColumn(caseSensitive));
@@ -71,7 +71,7 @@ namespace Automao.Data
 
 				foreach(var item in where)
 				{
-					var result = Resolve(item, columnInfos, caseSensitive, ref startFormatIndex, out values);
+					var result = Resolve(item, columnInfos, caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
 					if(string.IsNullOrEmpty(result))
 						continue;
 
@@ -88,30 +88,30 @@ namespace Automao.Data
 				if(sqls.Count == 1)
 					return sqls[0];
 
-				return string.Format("{0}", string.Join(where.ConditionCombine.Parse(), sqls));
+				return string.Join(where.ConditionCombine.Parse(), sqls);
 			}
 
 			values = new object[0];
 			return null;
 		}
 
-		private static string Parse(this ConditionOperator clauseOperator, ref object[] values, ref int formatIndex)
+		private static string Parse(this ConditionOperator clauseOperator, ref object[] values, ref int tableIndex, ref int joinStartIndex, ref int valueIndex)
 		{
 			switch(clauseOperator)
 			{
 				case ConditionOperator.Between:
-					return string.Format("BETWEEN {{{0}}} AND {{{1}}}", formatIndex++, formatIndex++);
+					return string.Format("BETWEEN {{{0}}} AND {{{1}}}", valueIndex++, valueIndex++);
 				case ConditionOperator.Equal:
 				case ConditionOperator.Like:
 					{
 						if(values == null || values.Length == 0)
 							return "IS NULL";
-						return string.Format("{0} {{{1}}}", values[0] is string && ((string)values[0]).IndexOfAny("_%".ToArray()) >= 0 ? "LIKE" : "=", formatIndex++);
+						return string.Format("{0} {{{1}}}", values[0] is string && ((string)values[0]).IndexOfAny("_%".ToArray()) >= 0 ? "LIKE" : "=", valueIndex++);
 					}
 				case ConditionOperator.GreaterThan:
-					return string.Format("> {{{0}}}", formatIndex++);
+					return string.Format("> {{{0}}}", valueIndex++);
 				case ConditionOperator.GreaterThanEqual:
-					return string.Format(">= {{{0}}}", formatIndex++);
+					return string.Format(">= {{{0}}}", valueIndex++);
 				case ConditionOperator.In:
 				case ConditionOperator.NotIn:
 					{
@@ -124,32 +124,32 @@ namespace Automao.Data
 							if(value is ObjectAccessResult)
 							{
 								var objectAccessResult = (ObjectAccessResult)value;
-								values = objectAccessResult.Values;
-								return string.Format("{0} ({1})", clauseOperator == ConditionOperator.NotIn ? "NOT IN" : "IN", objectAccessResult.ExecuteSql);
+								var sql = objectAccessResult.CreateSql(ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
+								return string.Format("{0} ({1})", clauseOperator == ConditionOperator.NotIn ? "NOT IN" : "IN", sql);
 							}
-							return string.Format("{0} {{{1}}}", clauseOperator == ConditionOperator.NotIn ? "!=" : "=", formatIndex++);
+							return string.Format("{0} {{{1}}}", clauseOperator == ConditionOperator.NotIn ? "!=" : "=", valueIndex++);
 						}
 
 						var list = new List<string>();
 						for(int i = 0; i < values.Length; i++)
 						{
-							list.Add(string.Format("{{{0}}}", formatIndex + i));
+							list.Add(string.Format("{{{0}}}", valueIndex + i));
 						}
 
-						formatIndex += values.Length;
+						valueIndex += values.Length;
 						return string.Format("{0} ({1})", clauseOperator == ConditionOperator.NotIn ? "NOT IN" : "IN", string.Join(",", list));
 					}
 
 				case ConditionOperator.LessThan:
-					return string.Format("< {{{0}}}", formatIndex++);
+					return string.Format("< {{{0}}}", valueIndex++);
 				case ConditionOperator.LessThanEqual:
-					return string.Format("<= {{{0}}}", formatIndex++);
+					return string.Format("<= {{{0}}}", valueIndex++);
 				case ConditionOperator.NotEqual:
 					{
 						if(values == null || values.Length == 0)
 							return "IS NOT NULL";
 
-						return string.Format("!= {{{0}}}", formatIndex++);
+						return string.Format("!= {{{0}}}", valueIndex++);
 					}
 				default:
 					throw new ArgumentOutOfRangeException("未知的clauseOperator");

@@ -9,56 +9,29 @@ using Zongsoft.Data;
 
 namespace Automao.Data
 {
+	#region 委托
+	public delegate string CreateSql(ref int tableIndex, ref int joinStartIndex, ref int valueIndex, out object[] values);
+	public delegate IEnumerable<T> Execute<T>(string sql, object[] values);
+	#endregion
+
 	public class ObjectAccessResult
 	{
 		#region 字段
-		private int _joinStartIndex;
-		private object[] _values;
-		private string _executeSql;
-		private int _index;
+		private ClassInfo _classInfo;
+		private CreateSql _createSql;
 		#endregion
 
 		#region 构造函数
-		public ObjectAccessResult(int index, int joinStartIndex, object[] values, string executeSql)
+		public ObjectAccessResult(CreateSql createSql)
 		{
-			_index = index;
-			_joinStartIndex = joinStartIndex;
-			_values = values;
-			_executeSql = executeSql;
+			_createSql = createSql;
 		}
 		#endregion
 
-		#region 属性
-		public int Index
+		#region 方法
+		public string CreateSql(ref int tableIndex, ref int joinStartIndex, ref int valueIndex, out object[] values)
 		{
-			get
-			{
-				return _index;
-			}
-		}
-
-		public int JoinStartIndex
-		{
-			get
-			{
-				return _joinStartIndex;
-			}
-		}
-
-		public object[] Values
-		{
-			get
-			{
-				return _values;
-			}
-		}
-
-		public string ExecuteSql
-		{
-			get
-			{
-				return _executeSql;
-			}
+			return _createSql(ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
 		}
 		#endregion
 	}
@@ -71,16 +44,14 @@ namespace Automao.Data
 
 		#region 字段
 		private IEnumerator _enumerator;
-		private Func<IEnumerable<T>> _getResult;
-		private int _index;
+		private Execute<T> _getResult;
 		#endregion
 
 		#region 构造函数
-		public ObjectAccessResult(int index, int joinStartIndex, object[] values, string executeSql, Func<IEnumerable<T>> getResult)
-			: base(index,joinStartIndex, values, executeSql)
+		public ObjectAccessResult(CreateSql createSql, Execute<T> execute)
+			: base(createSql)
 		{
-			_getResult = getResult;
-			_index = index;
+			_getResult = execute;
 		}
 		#endregion
 
@@ -90,9 +61,20 @@ namespace Automao.Data
 			get
 			{
 				if(_enumerator == null)
+				{
 					lock(_lock)
+					{
 						if(_enumerator == null)
-							_enumerator = _getResult().GetEnumerator();
+						{
+							var tableIndex = 0;
+							var joinStartIndex = 0;
+							var valueIndex = 0;
+							object[] values;
+							var sql = base.CreateSql(ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
+							_enumerator = _getResult(sql, values).GetEnumerator();
+						}
+					}
+				}
 				return _enumerator;
 			}
 		}

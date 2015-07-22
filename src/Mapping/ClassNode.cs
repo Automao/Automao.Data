@@ -131,6 +131,9 @@ namespace Automao.Data.Mapping
 						throw new Exception(string.Format("当前节点({0})的Type出错", Name));
 				}
 
+				if(_entityType == null)
+					throw new Exception(string.Format("当前节点({0})的Type未设置", Name));
+
 				return _entityType;
 			}
 		}

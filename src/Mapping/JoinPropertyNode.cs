@@ -70,6 +70,10 @@ namespace Automao.Data.Mapping
 			{
 				return _member;
 			}
+			set
+			{
+				_member = value;
+			}
 		}
 		#endregion
 

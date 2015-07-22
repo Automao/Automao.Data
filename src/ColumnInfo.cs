@@ -135,7 +135,7 @@ namespace Automao.Data
 		#endregion
 
 		#region 静态方法
-		public static Dictionary<string, ColumnInfo> Create(IEnumerable<string> columns, ClassInfo root, int joinStartIndex, out List<Join> joinList)
+		public static Dictionary<string, ColumnInfo> Create(IEnumerable<string> columns, ClassInfo root)
 		{
 			var result = new Dictionary<string, ColumnInfo>();
 			var joinDic = new Dictionary<string, Join>();
@@ -175,7 +175,7 @@ namespace Automao.Data
 							if(IsParentProperty(host.ClassNode, property, out parents))//搞定继承的问题
 							{
 								parents.Reverse();
-								var last = AddJoin(joinDic, parent, host, ref joinStartIndex, parents[0].Name, parents);
+								var last = AddJoin(joinDic, parent, host, parents[0].Name, parents);
 								columnInfo._join = last;
 								columnInfo._subAsName = host.AsName;
 								columnInfo._classInfo = last.Target;
@@ -191,9 +191,8 @@ namespace Automao.Data
 						if(!joinDic.ContainsKey(key))
 						{
 							var join = new Join(parent, host);
-							join.Index = joinStartIndex;
 							join.JoinInfo = joinInfo;
-							join.Target = new ClassInfo("J", joinStartIndex++, joinInfo.Target);
+							join.Target = new ClassInfo("J", joinInfo.Target);
 
 							host = join.Target;
 							parent = join;
@@ -220,7 +219,6 @@ namespace Automao.Data
 				result.Add(item, columnInfo);
 			}
 
-			joinList = joinDic.Values.ToList();
 			return result;
 		}
 
@@ -256,7 +254,7 @@ namespace Automao.Data
 			return false;
 		}
 
-		public static Join AddJoin(Dictionary<string, Join> list, Join parent, ClassInfo host, ref int joinStartIndex, string key, IEnumerable<JoinPropertyNode> values)
+		public static Join AddJoin(Dictionary<string, Join> list, Join parent, ClassInfo host, string key, IEnumerable<JoinPropertyNode> values)
 		{
 			Join join = null;
 			foreach(var value in values)
@@ -266,9 +264,8 @@ namespace Automao.Data
 				else
 				{
 					join = new Join(parent, host);
-					join.Index = joinStartIndex;
 					join.JoinInfo = value;
-					join.Target = new ClassInfo("J", joinStartIndex++, join.JoinInfo.Target);
+					join.Target = new ClassInfo("J", join.JoinInfo.Target);
 					list.Add(key, join);
 				}
 

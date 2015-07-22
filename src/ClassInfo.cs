@@ -9,24 +9,26 @@ namespace Automao.Data
 {
 	public class ClassInfo
 	{
+		#region 字段
 		private string _asName;
 		private string _as;
 		private int _asIndex;
 		private Mapping.ClassNode _classNode;
-		private List<Join> _joins;
+		private List<Join> _joins; 
+		#endregion
 
-		public ClassInfo(string @as, int asIndex, ClassNode classNode)
+		#region 构造函数
+		public ClassInfo(string @as, ClassNode classNode)
 		{
 			_as = @as;
 			_classNode = classNode;
 			_joins = new List<Join>();
 
-			_asIndex = asIndex;
 			_asName = @as;
-			if(_asIndex > 0)
-				_asName += _asIndex.ToString();
-		}
+		} 
+		#endregion
 
+		#region 属性
 		public ClassNode ClassNode
 		{
 			get
@@ -65,6 +67,27 @@ namespace Automao.Data
 			{
 				return _asIndex;
 			}
+		} 
+		#endregion
+
+		#region 方法
+		public void SetIndex(int index)
+		{
+			_asIndex = index;
+			if(index > 0)
+				_asName += index.ToString();
 		}
+
+		public int SetJoinIndex(int start)
+		{
+			foreach(var join in _joins)
+			{
+				join.Target.SetIndex(start);
+				start = join.Target.SetJoinIndex(start + 1);
+			}
+
+			return start;
+		} 
+		#endregion
 	}
 }

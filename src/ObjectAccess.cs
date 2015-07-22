@@ -109,47 +109,9 @@ namespace Automao.Data
 				throw new Exception(string.Format("未找到{0}对应的mapping节点", name));
 
 			classNode.SetEntityType(typeof(T));
+			var classInfo = new ClassInfo("T", classNode);
 
-			object[] values;
-			int tableIndex;
-			int joinStartIndex;
-			EachCondition(condition, out tableIndex, out joinStartIndex, out values);
-
-			tableIndex++;
-			joinStartIndex++;
-
-			var root = new ClassInfo("T", tableIndex, classNode);
-			int valueCount = values.Length;
-			string countSql;
-			var sql = CreateSelectSql(root, condition, members, paging, grouping, sorting, ref joinStartIndex, ref valueCount, out countSql, out values);
-
-			if(!string.IsNullOrEmpty(countSql))
-			{
-				var tablevalues = this.Executer.Select(countSql, CreateParameters(0, values));
-
-				if(tablevalues != null)
-				{
-					var item = tablevalues.FirstOrDefault();
-					paging.TotalCount = Convert.ToInt32(item.Values.First());
-				}
-			}
-
-			return new ObjectAccessResult<T>(tableIndex, joinStartIndex, values, sql, () =>
-			{
-
-				var tablevalues = this.Executer.Select(sql, this.CreateParameters(0, values));
-
-				var result = this.SetEntityValue<T>(tablevalues, root);
-
-				return result;
-			});
-		}
-
-		internal string CreateSelectSql(ClassInfo root, ICondition condition, string[] members, Paging paging, Grouping grouping, Sorting[] sorting, ref int joinStartIndex, ref int valueCount, out string countSql, out object[] values)
-		{
-			#region 构建所有列
 			var allColumnInfos = new Dictionary<string, ColumnInfo>();
-			var selectColumnInfos = new Dictionary<string, ColumnInfo>();
 
 			var conditionNames = GetConditionName(condition) ?? new string[0];
 			IEnumerable<string> allColumns = conditionNames;
@@ -170,13 +132,25 @@ namespace Automao.Data
 			}
 
 			allColumns = allColumns.Concat(members);
+			allColumnInfos = ColumnInfo.Create(allColumns, classInfo);
 
-			List<Join> joinList;
-			allColumnInfos = ColumnInfo.Create(allColumns, root, joinStartIndex, out joinList);
+			return new ObjectAccessResult<T>((ref int tableIndex, ref int joinStartIndex, ref int valueIndex, out object[] values) =>
+			{
+				classInfo.SetIndex(tableIndex++);
+				joinStartIndex = classInfo.SetJoinIndex(joinStartIndex);
 
-			joinStartIndex += joinList.Count;
-			#endregion
+				var sql = CreateSelectSql(classInfo, condition, members, conditionNames, allColumnInfos, paging, grouping, sorting, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
+				return sql;
+			}, (sql, values) =>
+			{
+				var tablevalues = this.Executer.Select(sql, this.CreateParameters(0, values));
+				var result = this.SetEntityValue<T>(tablevalues, classInfo);
+				return result;
+			});
+		}
 
+		internal string CreateSelectSql(ClassInfo classInfo, ICondition condition, string[] members, string[] conditionNames, Dictionary<string, ColumnInfo> allColumnInfos, Paging paging, Grouping grouping, Sorting[] sorting, ref int tableIndex, ref int joinStartIndex, ref int valueIndex, out object[] values)
+		{
 			Func<ColumnInfo, bool> predicate = (p =>
 			{
 				var columnInfo = p;
@@ -194,9 +168,7 @@ namespace Automao.Data
 			#endregion
 
 			#region where
-			int startFormatIndex = valueCount;
-
-			var where = condition.ToWhere(allColumnInfos, _caseSensitive, ref startFormatIndex, out values);
+			var where = condition.ToWhere(allColumnInfos, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
 			#endregion
 
 			#region join
@@ -214,7 +186,7 @@ namespace Automao.Data
 				}
 			}
 
-			var join = string.Join(" ", tempJoinInfos.OrderBy(p => p.Index).Select(p => p.ToJoinSql(_caseSensitive)));
+			var join = string.Join(" ", tempJoinInfos.OrderBy(p => p.Target.AsIndex).Select(p => p.ToJoinSql(_caseSensitive)));
 			#endregion
 
 			#region grouping
@@ -222,7 +194,7 @@ namespace Automao.Data
 			string group = string.Empty;
 			string groupedSelectColumns = string.Empty;
 			string groupedJoin = string.Empty;
-			var newTableNameEx = root.As + (root.AsIndex + 1);
+			var newTableNameEx = classInfo.As + (classInfo.AsIndex + 1);
 			if(grouping != null)
 			{
 				var groupColumnInfos = grouping.Members.Select(p => allColumnInfos[p]).ToArray();
@@ -242,13 +214,20 @@ namespace Automao.Data
 					}
 				}
 
-				groupedJoin = string.Join(" ", tempJoinInfos.OrderBy(p => p.Index).Select(p =>
+				groupedJoin = string.Join(" ", tempJoinInfos.OrderBy(p => p.Target.AsIndex).Select(p =>
 				{
 					var groupColumnInfo = groupColumnInfos.Where(gc => gc.Join == p.Parent).ToArray();
 					if(groupColumnInfo.Any())
 					{
 						var dic = p.JoinInfo.Member.ToDictionary(c => groupColumnInfo.FirstOrDefault(gc => gc.Field == c.Key.Name).GetColumnEx(_caseSensitive),
 							c => c.Key.Column);
+
+						if(p.JoinInfo.Type == JoinType.Left)
+						{
+							var joinInfo = new JoinPropertyNode(p.JoinInfo.Name, p.JoinInfo.Target);
+							joinInfo.Member = p.JoinInfo.Member;
+							p.JoinInfo = joinInfo;
+						}
 
 						return Join.CreatJoinSql(_caseSensitive, p, newTableNameEx, dic);
 					}
@@ -258,7 +237,7 @@ namespace Automao.Data
 				if(grouping.Condition != null)
 				{
 					object[] tempValues;
-					having = grouping.Condition.ToWhere(allColumnInfos, _caseSensitive, ref startFormatIndex, out tempValues, "HAVING {0}");
+					having = grouping.Condition.ToWhere(allColumnInfos, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out tempValues, "HAVING {0}");
 					values = values.Concat(tempValues).ToArray();
 				}
 			}
@@ -268,21 +247,28 @@ namespace Automao.Data
 
 			string sql;
 			if(string.IsNullOrEmpty(group))
-				sql = CreateSelectSql(root, columns, where, join, orderby, paging);
+				sql = CreateSelectSql(classInfo, columns, where, join, orderby, paging);
 			else
-				sql = CreateSelectSql(root, newTableNameEx, columns, where, join,
+				sql = CreateSelectSql(classInfo, newTableNameEx, columns, where, join,
 					group, having, groupedSelectColumns, groupedJoin, orderby, paging);
 
 			if(paging != null && paging.TotalCount == 0)
 			{
+				var countSql = string.Empty;
 				if(string.IsNullOrEmpty(group))
-					countSql = CreateSelectSql(root, "COUNT(0)", where, join, null, null);
+					countSql = CreateSelectSql(classInfo, "COUNT(0)", where, join, null, null);
 				else
-					countSql = CreateSelectSql(root, newTableNameEx, columns, where, join,
+					countSql = CreateSelectSql(classInfo, newTableNameEx, columns, where, join,
 						group, having, "COUNT(0)", groupedJoin, null, null);
+
+				var tablevalues = this.Executer.Select(countSql, CreateParameters(0, values));
+
+				if(tablevalues != null)
+				{
+					var item = tablevalues.FirstOrDefault();
+					paging.TotalCount = Convert.ToInt32(item.Values.First());
+				}
 			}
-			else
-				countSql = string.Empty;
 
 			return sql;
 		}
@@ -308,13 +294,15 @@ namespace Automao.Data
 			var conditionNames = GetConditionName(condition);
 			var allcolumns = conditionNames.Concat(includes);
 
-			var root = new ClassInfo("T", 0, info);
-			List<Join> joinList;
-			allColumnInfos = ColumnInfo.Create(allcolumns, root, 0, out joinList);
+			var classInfo = new ClassInfo("T", info);
+			allColumnInfos = ColumnInfo.Create(allcolumns, classInfo);
+			classInfo.SetJoinIndex(0);
 
-			int startFormatIndex = 0;
+			int tableIndex = 0;
+			int joinStartIndex = 0;
+			int valueIndex = 0;
 			object[] values;
-			var whereSql = condition.ToWhere(allColumnInfos, _caseSensitive, ref startFormatIndex, out values);
+			var whereSql = condition.ToWhere(allColumnInfos, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
 
 			var tempJoinInfos = new List<Join>();
 			foreach(var item in allColumnInfos.Keys)
@@ -326,7 +314,7 @@ namespace Automao.Data
 					tempJoinInfos.AddRange(columnInfo.Join.GetParent(p => tempJoinInfos.Contains(p)));
 				}
 			}
-			var joinsql = string.Join(" ", tempJoinInfos.OrderBy(p => p.Index).Select(p => p.ToJoinSql(_caseSensitive)));
+			var joinsql = string.Join(" ", tempJoinInfos.OrderBy(p => p.Target.AsIndex).Select(p => p.ToJoinSql(_caseSensitive)));
 
 			string countSql;
 			if(includes == null || includes.Length == 0)
@@ -357,12 +345,15 @@ namespace Automao.Data
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
 			var conditionNames = GetConditionName(condition);
-			List<Join> joinList;
-			var columnInfos = ColumnInfo.Create(conditionNames, new ClassInfo("T", 0, info), 0, out joinList);
+			var classInfo = new ClassInfo("T", info);
+			var columnInfos = ColumnInfo.Create(conditionNames, classInfo);
+			classInfo.SetJoinIndex(0);
 
 			var values = new object[0];
-			var formatStartIndex = 0;
-			var whereSql = condition.ToWhere(columnInfos, _caseSensitive, ref formatStartIndex, out values);
+			int tableIndex = 0;
+			int joinStartIndex = 0;
+			int valueIndex = 0;
+			var whereSql = condition.ToWhere(columnInfos, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
 
 			var sql = string.Format("DELETE FROM {0} {1}", info.GetTableName(_caseSensitive), whereSql);
 			return Executer.Execute(sql, CreateParameters(0, values));
@@ -487,7 +478,7 @@ namespace Automao.Data
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
 			var sqls = new List<KeyValuePair<string, DbParameter[]>>();
-			var classInfo = new ClassInfo("T", 0, info);
+			var classInfo = new ClassInfo("T", info);
 
 			var columnformat = _caseSensitive ? "\"{0}\"={{{1}}}" : "{0}={{{1}}}";
 			var nullcolumnformat = _caseSensitive ? "\"{0}\"=NULL" : "{0}=NULL";
@@ -495,14 +486,16 @@ namespace Automao.Data
 			var tableName = info.GetTableName(_caseSensitive);
 
 			var values = new object[0];
-			var formatStartIndex = 0;
+			int tableIndex = 0;
+			int joinStartIndex = 0;
+			int valueIndex = 0;
 			string wheresql = string.Empty;
 			if(condition != null)
 			{
 				var columns = GetConditionName(condition);
-				List<Join> joinList;
-				var columnInofs = ColumnInfo.Create(columns, classInfo, 0, out joinList);
-				wheresql = condition.ToWhere(columnInofs, _caseSensitive, ref formatStartIndex, out values);
+				var columnInofs = ColumnInfo.Create(columns, classInfo);
+				classInfo.SetJoinIndex(0);
+				wheresql = condition.ToWhere(columnInofs, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
 			}
 
 			foreach(var entity in entities)
@@ -517,10 +510,11 @@ namespace Automao.Data
 
 					var newCondition = new ConditionCollection(ConditionCombine.And, pks.Select(p => new Condition(p.Key.Name, p.Value)));
 
-					List<Join> joinList;
-					var columnInfos = ColumnInfo.Create(pks.Select(p => p.Key.Name), classInfo, 0, out joinList);
+					classInfo.Joins.Clear();
+					var columnInfos = ColumnInfo.Create(pks.Select(p => p.Key.Name), classInfo);
+					classInfo.SetJoinIndex(0);
 
-					wheresql = newCondition.ToWhere(columnInfos, _caseSensitive, ref formatStartIndex, out values);
+					wheresql = newCondition.ToWhere(columnInfos, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
 				}
 
 				var temp = dic.Where(p => p.Value != null);
@@ -556,26 +550,26 @@ namespace Automao.Data
 		#endregion
 
 		#region 方法
-		internal IEnumerable<T> SetEntityValue<T>(IEnumerable<Dictionary<string, object>> table, ClassInfo root)
+		internal IEnumerable<T> SetEntityValue<T>(IEnumerable<Dictionary<string, object>> table, ClassInfo classInfo)
 		{
 			foreach(var row in table)
 			{
-				var values = row.Where(p => p.Key.StartsWith(root.AsName + "_")).ToDictionary(p => p.Key.Substring(root.AsName.Length + 1), p => p.Value);
-				var entityType = root.ClassNode.EntityType;
-				var entity = CreateEntity<T>(entityType, values, root.ClassNode);
+				var values = row.Where(p => p.Key.StartsWith(classInfo.AsName + "_")).ToDictionary(p => p.Key.Substring(classInfo.AsName.Length + 1), p => p.Value);
+				var entityType = classInfo.ClassNode.EntityType;
+				var entity = CreateEntity<T>(entityType, values, classInfo.ClassNode);
 
-				SetNavigationProperty(root, entity, row);
+				SetNavigationProperty(classInfo, entity, row);
 
 				yield return entity;
 			}
 		}
 
-		private void SetNavigationProperty(ClassInfo root, object entity, Dictionary<string, object> values)
+		private void SetNavigationProperty(ClassInfo classInfo, object entity, Dictionary<string, object> values)
 		{
-			if(root.Joins != null)
+			if(classInfo.Joins != null)
 			{
 				var type = entity.GetType();
-				foreach(var item in root.Joins)
+				foreach(var item in classInfo.Joins)
 				{
 					var dic = values.Where(p => p.Key.StartsWith(item.Target.AsName + "_")).ToDictionary(p => p.Key.Substring(item.Target.AsName.Length + 1), p => p.Value);
 					if(dic == null || dic.Count == 0 || dic.All(p => p.Value is System.DBNull))
@@ -598,16 +592,16 @@ namespace Automao.Data
 			}
 		}
 
-		protected T CreateEntity<T>(Type entityType, Dictionary<string, object> propertyValues, ClassNode info)
+		protected T CreateEntity<T>(Type entityType, Dictionary<string, object> propertyValues, ClassNode classNode)
 		{
 			if(IsDictionary(entityType))
 				return (T)(object)propertyValues;
 
 			System.Reflection.ParameterInfo[] cpinfo = null;
 			object[] instanceArgs = null;
-			if(info != null)
+			if(classNode != null)
 			{
-				var constructorPropertys = info.PropertyNodeList.Where(p => p.PassedIntoConstructor).ToList();
+				var constructorPropertys = classNode.PropertyNodeList.Where(p => p.PassedIntoConstructor).ToList();
 				cpinfo = entityType.GetConstructors().Where(p => p.IsPublic).Select(p => p.GetParameters()).FirstOrDefault(p => p.Length == constructorPropertys.Count);
 				instanceArgs = new object[constructorPropertys.Count];
 				constructorPropertys.ForEach(p =>
@@ -639,7 +633,7 @@ namespace Automao.Data
 				if(isClass)
 					continue;
 
-				var propertyInfo = info == null ? null : info.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(property.Name, StringComparison.CurrentCultureIgnoreCase));
+				var propertyInfo = classNode == null ? null : classNode.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(property.Name, StringComparison.CurrentCultureIgnoreCase));
 				if(propertyInfo != null && string.IsNullOrEmpty(propertyInfo.Column))
 					continue;
 
@@ -656,7 +650,7 @@ namespace Automao.Data
 			return entity;
 		}
 
-		protected Dictionary<PropertyNode, object> GetColumnFromEntity(ClassNode info, object entity, string[] members, out Dictionary<PropertyNode, object> pks)
+		protected Dictionary<PropertyNode, object> GetColumnFromEntity(ClassNode classNode, object entity, string[] members, out Dictionary<PropertyNode, object> pks)
 		{
 			IDictionary<string, object> properties;
 			pks = new Dictionary<PropertyNode, object>();
@@ -677,7 +671,7 @@ namespace Automao.Data
 						properties.Add(property.Name, value);
 					}
 
-					var propertyNo = info.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(property.Name, StringComparison.OrdinalIgnoreCase));
+					var propertyNo = classNode.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(property.Name, StringComparison.OrdinalIgnoreCase));
 					if(propertyNo != null)
 					{
 						if(value == null)
@@ -691,7 +685,7 @@ namespace Automao.Data
 
 			return list.Select(p =>
 			{
-				var item = info.PropertyNodeList.FirstOrDefault(pp => pp.Name.Equals(p.Key, StringComparison.CurrentCultureIgnoreCase));
+				var item = classNode.PropertyNodeList.FirstOrDefault(pp => pp.Name.Equals(p.Key, StringComparison.CurrentCultureIgnoreCase));
 				if(item != null && item.UnColumn)
 					return null;
 				return new
@@ -732,47 +726,6 @@ namespace Automao.Data
 				}
 
 				return list.ToArray();
-			}
-		}
-
-		private void EachCondition(ICondition condition, out int tableIndex, out int joinStartIndex, out object[] values)
-		{
-			joinStartIndex = -1;
-			tableIndex = -1;
-			values = new object[0];
-
-			if(condition == null)
-				return;
-
-			if(condition is Condition)
-			{
-				var where = (Condition)condition;
-				if(where.Value is ObjectAccessResult)
-				{
-					var result = (ObjectAccessResult)where.Value;
-					joinStartIndex = result.JoinStartIndex;
-					tableIndex = result.Index;
-					values = result.Values;
-				}
-			}
-			else
-			{
-				var tempValues = new List<object>();
-
-				foreach(var item in (ConditionCollection)condition)
-				{
-					int i;
-					int ji;
-					object[] vs;
-					EachCondition(item, out i, out ji, out vs);
-					if(ji > -1)
-						joinStartIndex += ji;
-					if(i > -1)
-						tableIndex += i;
-					tempValues.AddRange(vs);
-				}
-
-				values = tempValues.ToArray();
 			}
 		}
 
