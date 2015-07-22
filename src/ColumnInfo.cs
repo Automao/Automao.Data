@@ -76,15 +76,19 @@ namespace Automao.Data
 		#region 方法
 		public string ToColumn(bool caseSensitive)
 		{
-			var columnformat = caseSensitive ? "{0}.\"{1}\"" : "{0}.{1}";
+			var asName = _classInfo.AsName;
+			if(!string.IsNullOrEmpty(asName))
+				asName += ".";
+
+			var columnformat = caseSensitive ? "{0}\"{1}\"" : "{0}{1}";
 			var field = _propertyNode != null ? _propertyNode.Column : _field;
 
 			if(field.Equals("count(0)", System.StringComparison.OrdinalIgnoreCase))
 				return "COUNT(0)";
 			else if(!string.IsNullOrEmpty(_aggregateFunctionName))
-				return string.Format(caseSensitive ? "{0}({1}.\"{2}\")" : "{0}({1}.{2})", _aggregateFunctionName.ToUpper(), _classInfo.AsName, field);
+				return string.Format(caseSensitive ? "{0}({1}\"{2}\")" : "{0}({1}{2})", _aggregateFunctionName.ToUpper(), asName, field);
 
-			return string.Format(columnformat, _classInfo.AsName, field);
+			return string.Format(columnformat, asName, field);
 		}
 
 		public string ToSelectColumn(bool caseSensitive)
@@ -92,14 +96,18 @@ namespace Automao.Data
 			if(!string.IsNullOrEmpty(_selectColumn))
 				return _selectColumn;
 
-			var columnformat = caseSensitive ? "{0}.\"{1}\"" : "{0}.{1}";
+			var asName = _classInfo.AsName;
+			if(!string.IsNullOrEmpty(asName))
+				asName += ".";
+
+			var columnformat = caseSensitive ? "{0}\"{1}\"" : "{0}{1}";
 			var field = _propertyNode != null ? _propertyNode.Column : _field;
 			if(field.Equals("count(0)", System.StringComparison.OrdinalIgnoreCase))
 				return "COUNT(0)";
 			else if(!string.IsNullOrEmpty(_aggregateFunctionName))
-				return string.Format(caseSensitive ? "{0}({1}.\"{2}\")" : "{0}({1}.{2})", _aggregateFunctionName.ToUpper(), _classInfo.AsName, field);
+				return string.Format(caseSensitive ? "{0}({1}\"{2}\")" : "{0}({1}{2})", _aggregateFunctionName.ToUpper(), asName, field);
 
-			_selectColumn = string.Format(columnformat, _classInfo.AsName, field) + " " + GetColumnEx(caseSensitive);
+			_selectColumn = string.Format(columnformat, asName, field) + " " + GetColumnEx(caseSensitive);
 			return _selectColumn;
 		}
 

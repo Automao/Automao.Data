@@ -87,7 +87,12 @@ namespace Automao.Data
 			}
 
 			return start;
-		} 
+		}
+
+		public string GetTableName(bool caseSensitive)
+		{
+			return string.Format("{0} {1}", _classNode.GetTableName(caseSensitive), _asName);
+		}
 		#endregion
 	}
 }

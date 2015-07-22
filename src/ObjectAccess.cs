@@ -324,7 +324,7 @@ namespace Automao.Data
 			else
 				countSql = string.Format("COUNT(CONCAT({0}))", string.Join(",", includes.Select(p => allColumnInfos[p]).Select(p => p.ToColumn(_caseSensitive))));
 
-			var sql = string.Format("SELECT {0} FROM {1} T {2} {3}", countSql, info.GetTableName(_caseSensitive), joinsql, whereSql);
+			var sql = string.Format("SELECT {0} FROM {1} {2} {3}", countSql, classInfo.GetTableName(_caseSensitive), joinsql, whereSql);
 
 			var result = Executer.ExecuteScalar(sql, CreateParameters(0, values));
 			return int.Parse(result.ToString());
@@ -345,7 +345,7 @@ namespace Automao.Data
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
 			var conditionNames = GetConditionName(condition);
-			var classInfo = new ClassInfo("T", info);
+			var classInfo = new ClassInfo("", info);
 			var columnInfos = ColumnInfo.Create(conditionNames, classInfo);
 			classInfo.SetJoinIndex(0);
 
@@ -419,9 +419,6 @@ namespace Automao.Data
 		#region 新增
 		protected override int Insert<T>(string name, IEnumerable<T> entities, string[] includes)
 		{
-			if(!entities.GetEnumerator().MoveNext())
-				return 0;
-
 			if(string.IsNullOrEmpty(name))
 				name = typeof(T).Name;
 
@@ -482,8 +479,8 @@ namespace Automao.Data
 
 			var columnformat = _caseSensitive ? "\"{0}\"={{{1}}}" : "{0}={{{1}}}";
 			var nullcolumnformat = _caseSensitive ? "\"{0}\"=NULL" : "{0}=NULL";
-			var updateformat = "UPDATE {0} T SET {1} {2}";
-			var tableName = info.GetTableName(_caseSensitive);
+			var updateformat = "UPDATE {0} SET {1} {2}";
+			var tableName = classInfo.GetTableName(_caseSensitive);
 
 			var values = new object[0];
 			int tableIndex = 0;
@@ -518,15 +515,14 @@ namespace Automao.Data
 				}
 
 				var temp = dic.Where(p => p.Value != null);
-				var list = temp.Select((p, i) => string.Format(columnformat, p.Key.Column, i)).ToList();
-				var paramers = temp.Select((p, i) => CreateParameter(i, p.Value)).ToList();
+				var list = temp.Select((p, i) => string.Format(columnformat, p.Key.Column, i + valueIndex)).ToList();
+				var paramers = CreateParameters(0, values).Concat(temp.Select((p, i) => CreateParameter(i + valueIndex, p.Value))).ToArray();
 
 				list.AddRange(dic.Where(p => p.Value == null).Select(p => string.Format(nullcolumnformat, p.Key.Column)));
-				paramers.AddRange(CreateParameters(paramers.Count, values));
 
 				var sql = string.Format(updateformat, tableName, string.Join(",", list), wheresql);
 
-				sqls.Add(new KeyValuePair<string, DbParameter[]>(sql, paramers.ToArray()));
+				sqls.Add(new KeyValuePair<string, DbParameter[]>(sql, paramers));
 			}
 
 			var updateCount = 0;

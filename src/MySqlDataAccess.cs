@@ -62,7 +62,7 @@ namespace Automao.Data
 		#region 重写方法
 		protected override string CreateSelectSql(ClassInfo info, string columns, string where, string join, string orderby, Paging paging)
 		{
-			var sql = string.Format("SELECT {0} FROM {1} {2}", columns, info.ClassNode.GetTableName(false), info.AsName);
+			var sql = string.Format("SELECT {0} FROM {1}", columns, info.GetTableName(false));
 			if(!string.IsNullOrEmpty(join))
 				sql += " " + join;
 			if(!string.IsNullOrEmpty(where))
@@ -83,7 +83,7 @@ namespace Automao.Data
 
 		protected override string CreateSelectSql(ClassInfo info, string newTableNameEx, string columns, string where, string join, string group, string having, string groupedSelectColumns, string groupedJoin, string orderby, Paging paging)
 		{
-			var sql = string.Format("SELECT {0} FROM {1} {2}", columns, info.ClassNode.GetTableName(false), info.AsName);
+			var sql = string.Format("SELECT {0} FROM {1}", columns, info.GetTableName(false));
 			if(!string.IsNullOrEmpty(join))
 				sql += " " + join;
 			if(!string.IsNullOrEmpty(where))

@@ -81,9 +81,9 @@ namespace Automao.Data
 		{
 			var isLeftJoin = join.JoinInfo.Type == JoinType.Left;
 
-			var joinformat = "{0} JOIN {1} {2} ON {3}";
+			var joinformat = "{0} JOIN {1} ON {2}";
 			var onformat = caseSensitive ? "{0}.\"{1}\"={2}.\"{3}\"" : "{0}.{1}={2}.{3}";
-			return string.Format(joinformat, isLeftJoin ? "LeFT" : "INNER", join.Target.ClassNode.GetTableName(caseSensitive), join.Target.AsName,
+			return string.Format(joinformat, isLeftJoin ? "LeFT" : "INNER", join.Target.GetTableName(caseSensitive),
 				string.Join(" AND ", relation.Select(jc => string.Format(onformat, hostAsName, jc.Key, join.Target.AsName, jc.Value))));
 		}
 	}
