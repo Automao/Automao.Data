@@ -186,6 +186,8 @@ namespace Automao.Data
 				}
 			}
 
+			Pretreatment(tempJoinInfos);
+
 			var join = string.Join(" ", tempJoinInfos.OrderBy(p => p.Target.AsIndex).Select(p => p.ToJoinSql(_caseSensitive)));
 			#endregion
 
@@ -194,7 +196,7 @@ namespace Automao.Data
 			string group = string.Empty;
 			string groupedSelectColumns = string.Empty;
 			string groupedJoin = string.Empty;
-			var newTableNameEx = classInfo.As + (classInfo.AsIndex + 1);
+			var newHostAsName = classInfo.As + (classInfo.AsIndex + 1);
 			if(grouping != null)
 			{
 				var groupColumnInfos = grouping.Members.Select(p => allColumnInfos[p]).ToArray();
@@ -214,22 +216,27 @@ namespace Automao.Data
 					}
 				}
 
+				foreach(var item in tempJoinInfos)
+				{
+					if(groupColumnInfos.Any(gc => gc.Join == item.Parent))
+					{
+						if(item.JoinInfo.Type == JoinType.Left)
+							item.ChangeMode(JoinType.Inner);
+						item.ChangeHostAsName(newHostAsName);
+					}
+				}
+
+				Pretreatment(tempJoinInfos);
+
 				groupedJoin = string.Join(" ", tempJoinInfos.OrderBy(p => p.Target.AsIndex).Select(p =>
 				{
-					var groupColumnInfo = groupColumnInfos.Where(gc => gc.Join == p.Parent).ToArray();
+					var groupColumnInfo = groupColumnInfos.Where(gc => gc.Join == p.Parent);
 					if(groupColumnInfo.Any())
 					{
-						var dic = p.JoinInfo.Member.ToDictionary(c => groupColumnInfo.FirstOrDefault(gc => gc.Field == c.Key.Name).GetColumnEx(_caseSensitive),
-							c => c.Key.Column);
+						var temp = groupColumnInfo.ToDictionary(gc => gc.Field, gc => gc);
+						var dic = p.JoinInfo.Member.ToDictionary(c => temp[c.Key.Name].GetColumnEx(_caseSensitive), c => c.Key.Column);
 
-						if(p.JoinInfo.Type == JoinType.Left)
-						{
-							var joinInfo = new JoinPropertyNode(p.JoinInfo.Name, p.JoinInfo.Target);
-							joinInfo.Member = p.JoinInfo.Member;
-							p.JoinInfo = joinInfo;
-						}
-
-						return Join.CreatJoinSql(_caseSensitive, p, newTableNameEx, dic);
+						return Join.CreatJoinSql(_caseSensitive, p, dic);
 					}
 					return p.ToJoinSql(_caseSensitive);
 				}));
@@ -249,7 +256,7 @@ namespace Automao.Data
 			if(string.IsNullOrEmpty(group))
 				sql = CreateSelectSql(classInfo, columns, where, join, orderby, paging);
 			else
-				sql = CreateSelectSql(classInfo, newTableNameEx, columns, where, join,
+				sql = CreateSelectSql(classInfo, newHostAsName, columns, where, join,
 					group, having, groupedSelectColumns, groupedJoin, orderby, paging);
 
 			if(paging != null && paging.TotalCount == 0)
@@ -258,7 +265,7 @@ namespace Automao.Data
 				if(string.IsNullOrEmpty(group))
 					countSql = CreateSelectSql(classInfo, "COUNT(0)", where, join, null, null);
 				else
-					countSql = CreateSelectSql(classInfo, newTableNameEx, columns, where, join,
+					countSql = CreateSelectSql(classInfo, newHostAsName, columns, where, join,
 						group, having, "COUNT(0)", groupedJoin, null, null);
 
 				var tablevalues = this.Executer.Select(countSql, CreateParameters(0, values));
@@ -723,6 +730,40 @@ namespace Automao.Data
 
 				return list.ToArray();
 			}
+		}
+
+		/// <summary>
+		/// 预处理
+		/// 在关联多张表时，父关联如果是left join并且子关联有inner join时要添加父关联的join on 条件
+		/// </summary>
+		/// <param name="joinList"></param>
+		private void Pretreatment(List<Join> joinList)
+		{
+			var whereformat = _caseSensitive ? "WHERE {0}.{1}={2}.\"{3}\"" : "WHERE {0}.{1}={2}.{3}";
+			var paging = new Paging(1, 1);
+			foreach(var item in joinList)
+			{
+				if(item.JoinInfo.Type == JoinType.Inner && ParentHasLeftJoin(item))
+				{
+					var tempClassInfo = new ClassInfo("TT", item.Target.ClassNode);
+					item.Parent.AddJoinWhere(string.Join(" AND ", item.JoinInfo.Member.Select(p =>
+					{
+						var where = string.Format(whereformat, tempClassInfo.AsName, p.Value.Column, item.Host.AsName, p.Key.Column);
+						return string.Format("EXISTS({0})", this.CreateSelectSql(tempClassInfo, "0", where, null, null, paging));
+					})));
+
+					item.ChangeMode(JoinType.Left);
+				}
+				continue;
+			}
+		}
+
+		private bool ParentHasLeftJoin(Join join)
+		{
+			if(join.Parent == null)
+				return false;
+
+			return join.Parent.JoinInfo.Type == JoinType.Left || ParentHasLeftJoin(join.Parent);
 		}
 
 		private bool IsDictionary(Type type)
