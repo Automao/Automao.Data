@@ -87,17 +87,22 @@ namespace Automao.Data
 				var transaction = Transaction.Current;
 				if(transaction != null)
 				{
-					var connection = transaction.Information.Arguments[_connection_ArgumentsKey] as DbConnection;
+					var connection = transaction.Information.Arguments.ContainsKey(_connection_ArgumentsKey)
+						? transaction.Information.Arguments[_connection_ArgumentsKey] as DbConnection
+						: null;
+
 					if(connection == null)
 					{
 						//创建一个新的数据连接对象
 						connection = _dbProviderFactory.CreateConnection();
 						connection.ConnectionString = _connectionString;
-						//设置当前事务的环境参数
-						transaction.Information.Arguments[_connection_ArgumentsKey] = connection;
 
 						var isolationLevel = Parse(transaction.IsolationLevel);
+						connection.Open();
 						var dbTransaction = connection.BeginTransaction(isolationLevel);
+
+						//设置当前事务的环境参数
+						transaction.Information.Arguments[_connection_ArgumentsKey] = connection;
 						transaction.Information.Arguments[_transaction_ArgumentsKey] = dbTransaction;
 
 						transaction.Enlist(this);

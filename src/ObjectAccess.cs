@@ -655,27 +655,48 @@ namespace Automao.Data
 
 		protected Dictionary<PropertyNode, object> GetColumnFromEntity(ClassNode classNode, object entity, string[] members, out Dictionary<PropertyNode, object> pks)
 		{
-			IDictionary<string, object> properties;
+			var properties = new Dictionary<PropertyNode, object>();
 			pks = new Dictionary<PropertyNode, object>();
 
 			if(entity is IDictionary<string, object>)
-				properties = (IDictionary<string, object>)entity;
+			{
+				var dic = (IDictionary<string, object>)entity;
+				foreach(var key in dic.Keys)
+				{
+					if(members != null && members.Contains(key, StringComparer.OrdinalIgnoreCase))
+						continue;
+
+					var propertyNo = classNode.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(key, StringComparison.OrdinalIgnoreCase)) ?? new PropertyNode(key);
+					if(propertyNo.UnColumn)
+						continue;
+
+					var value = dic[key];
+					if(propertyNo.IsKey)
+						pks.Add(propertyNo, value);
+					properties.Add(propertyNo, value);
+				}
+			}
 			else
 			{
 				Type type = entity.GetType();
-				properties = new Dictionary<string, object>();
 				foreach(var property in type.GetProperties())
 				{
+					if(members != null && members.Contains(property.Name, StringComparer.OrdinalIgnoreCase))
+						continue;
+
+					var propertyNo = classNode.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(property.Name, StringComparison.OrdinalIgnoreCase)) ?? new PropertyNode(property.Name);
+					if(propertyNo.UnColumn)
+						continue;
+
 					object value = null;
 
 					if((property.PropertyType.IsValueType || property.PropertyType == typeof(string) || property.PropertyType == typeof(byte[])))
 					{
 						value = property.GetValue(entity, null);
-						properties.Add(property.Name, value);
+						properties.Add(propertyNo, value);
 					}
 
-					var propertyNo = classNode.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(property.Name, StringComparison.OrdinalIgnoreCase));
-					if(propertyNo != null)
+					if(propertyNo.IsKey)
 					{
 						if(value == null)
 							value = property.GetValue(entity, null);
@@ -684,19 +705,7 @@ namespace Automao.Data
 				}
 			}
 
-			var list = properties.Where(p => members == null || members.Contains(p.Key, StringComparer.OrdinalIgnoreCase));
-
-			return list.Select(p =>
-			{
-				var item = classNode.PropertyNodeList.FirstOrDefault(pp => pp.Name.Equals(p.Key, StringComparison.CurrentCultureIgnoreCase));
-				if(item != null && item.UnColumn)
-					return null;
-				return new
-				{
-					key = item != null ? item : new PropertyNode(p.Key),
-					value = p.Value
-				};
-			}).Where(p => p != null).ToDictionary(p => p.key, p => p.value);
+			return properties;
 		}
 
 		public DbParameter[] CreateParameters(int startIndex, object[] values)
