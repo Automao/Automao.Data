@@ -663,7 +663,7 @@ namespace Automao.Data
 				var dic = (IDictionary<string, object>)entity;
 				foreach(var key in dic.Keys)
 				{
-					if(members != null && members.Contains(key, StringComparer.OrdinalIgnoreCase))
+					if(members != null && !members.Contains(key, StringComparer.OrdinalIgnoreCase))
 						continue;
 
 					var propertyNo = classNode.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(key, StringComparison.OrdinalIgnoreCase)) ?? new PropertyNode(key);
@@ -681,7 +681,7 @@ namespace Automao.Data
 				Type type = entity.GetType();
 				foreach(var property in type.GetProperties())
 				{
-					if(members != null && members.Contains(property.Name, StringComparer.OrdinalIgnoreCase))
+					if(members != null && !members.Contains(property.Name, StringComparer.OrdinalIgnoreCase))
 						continue;
 
 					var propertyNo = classNode.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(property.Name, StringComparison.OrdinalIgnoreCase)) ?? new PropertyNode(property.Name);
