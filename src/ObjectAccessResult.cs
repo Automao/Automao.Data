@@ -17,7 +17,6 @@ namespace Automao.Data
 	public class ObjectAccessResult
 	{
 		#region 字段
-		private ClassInfo _classInfo;
 		private CreateSql _createSql;
 		#endregion
 
@@ -71,7 +70,7 @@ namespace Automao.Data
 							var valueIndex = 0;
 							object[] values;
 							var sql = base.CreateSql(ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
-							_enumerator = _getResult(sql, values).GetEnumerator();
+							_enumerator = _getResult(sql, values).ToList().GetEnumerator();
 						}
 					}
 				}
@@ -88,7 +87,7 @@ namespace Automao.Data
 
 		IEnumerator IEnumerable.GetEnumerator()
 		{
-			return this.Enumerator;
+			return this;
 		}
 		#endregion
 
@@ -101,17 +100,19 @@ namespace Automao.Data
 		{
 			get
 			{
-				return ((IEnumerable)this).GetEnumerator().Current;
+				return _enumerator.Current;
 			}
 		}
 
 		public bool MoveNext()
 		{
-			return this.Enumerator.MoveNext();
+			var enumerator = _enumerator ?? this.Enumerator;
+			return enumerator.MoveNext();
 		}
 
 		public void Reset()
 		{
+			_enumerator.Reset();
 		}
 
 		T IEnumerator<T>.Current
