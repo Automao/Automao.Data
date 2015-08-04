@@ -27,19 +27,15 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Data;
 using System.Data.Common;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Text;
-using System.Threading;
 
-using Zongsoft.Data;
-using Zongsoft.ComponentModel;
-using Zongsoft.Transactions;
-
-using Automao.Data.Options.Configuration;
 using Automao.Data.Mapping;
+using Automao.Data.Options.Configuration;
+
+using Zongsoft.Common;
+using Zongsoft.Data;
 
 namespace Automao.Data
 {
@@ -273,7 +269,7 @@ namespace Automao.Data
 				if(tablevalues != null)
 				{
 					var item = tablevalues.FirstOrDefault();
-					paging.TotalCount = Convert.ToInt32(item.Values.First());
+					paging.TotalCount = Zongsoft.Common.Convert.ConvertValue<int>(item.Values.First());
 				}
 			}
 
@@ -484,12 +480,13 @@ namespace Automao.Data
 			var sqls = new List<KeyValuePair<string, DbParameter[]>>();
 			var classInfo = new ClassInfo("T", info);
 
-			var columnformat = _caseSensitive ? "\"{0}\"={{{1}}}" : "{0}={{{1}}}";
-			var nullcolumnformat = _caseSensitive ? "\"{0}\"=NULL" : "{0}=NULL";
+			var setFormat = _caseSensitive ? "\"{0}\"={{{1}}}" : "{0}={{{1}}}";
+			var addToSetFormat = _caseSensitive ? "\"{0}\"=\"{1}\" {2} {{{3}}}" : "{0}={1} {2} {{{3}}}";
+			var setNullFormat = _caseSensitive ? "\"{0}\"=NULL" : "{0}=NULL";
 			var updateformat = "UPDATE {0} SET {1} {2}";
 			var tableName = classInfo.GetTableName(_caseSensitive);
 
-			var values = new object[0];
+			var whereValues = new object[0];
 			int tableIndex = 0;
 			int joinStartIndex = 0;
 			int valueIndex = 0;
@@ -499,7 +496,7 @@ namespace Automao.Data
 				var columns = GetConditionName(condition);
 				var columnInofs = ColumnInfo.Create(columns, classInfo);
 				classInfo.SetJoinIndex(0);
-				wheresql = condition.ToWhere(columnInofs, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
+				wheresql = condition.ToWhere(columnInofs, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out whereValues);
 			}
 
 			foreach(var entity in entities)
@@ -518,18 +515,37 @@ namespace Automao.Data
 					var columnInfos = ColumnInfo.Create(pks.Select(p => p.Key.Name), classInfo);
 					classInfo.SetJoinIndex(0);
 
-					wheresql = newCondition.ToWhere(columnInfos, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
+					wheresql = newCondition.ToWhere(columnInfos, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out whereValues);
 				}
 
-				var temp = dic.Where(p => p.Value != null);
-				var list = temp.Select((p, i) => string.Format(columnformat, p.Key.Column, i + valueIndex)).ToList();
-				var paramers = CreateParameters(0, values).Concat(temp.Select((p, i) => CreateParameter(i + valueIndex, p.Value))).ToArray();
+				var temp = dic.Where(p => p.Value != null && !(p.Value is System.Linq.Expressions.Expression));
+				var list = temp.Select((p, i) => string.Format(setFormat, p.Key.Column, i + valueIndex)).ToList();
+				var paramers = CreateParameters(0, whereValues).Concat(temp.Select((p, i) => CreateParameter(i + valueIndex, p.Value))).ToList();
+				valueIndex += list.Count;
 
-				list.AddRange(dic.Where(p => p.Value == null).Select(p => string.Format(nullcolumnformat, p.Key.Column)));
+				var expressionValues = dic.Where(p =>
+				{
+					var flag = p.Value is BinaryExpression;
+					if(!flag)
+						return false;
+					var expression = (BinaryExpression)p.Value;
+					return expression.Left is MemberExpression && expression.Right is ConstantExpression;
+				}).ToDictionary(p => p.Key, p => (BinaryExpression)p.Value);
+
+				list.AddRange(expressionValues.Select((p, i) =>
+				{
+					var leftName = ((MemberExpression)p.Value.Left).Member.Name;
+					var tempPropertyNode = info.PropertyNodeList.FirstOrDefault(pp => pp.Name.Equals(leftName, StringComparison.OrdinalIgnoreCase)) ?? new PropertyNode(leftName);
+					return string.Format(addToSetFormat, p.Key.Column, tempPropertyNode.Column, p.Value.NodeType.ToSQL(), i + valueIndex);
+				}));
+
+				paramers.AddRange(expressionValues.Select((p, i) => CreateParameter(i + valueIndex, ((ConstantExpression)p.Value.Right).Value)));
+
+				list.AddRange(dic.Where(p => p.Value == null).Select(p => string.Format(setNullFormat, p.Key.Column)));
 
 				var sql = string.Format(updateformat, tableName, string.Join(",", list), wheresql);
 
-				sqls.Add(new KeyValuePair<string, DbParameter[]>(sql, paramers));
+				sqls.Add(new KeyValuePair<string, DbParameter[]>(sql, paramers.ToArray()));
 			}
 
 			var updateCount = 0;
@@ -690,7 +706,7 @@ namespace Automao.Data
 
 					object value = null;
 
-					if((property.PropertyType.IsValueType || property.PropertyType == typeof(string) || property.PropertyType == typeof(byte[])))
+					if(property.PropertyType.IsScalarType() || typeof(Expression).IsAssignableFrom(property.PropertyType))
 					{
 						value = property.GetValue(entity, null);
 						properties.Add(propertyNo, value);

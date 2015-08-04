@@ -31,9 +31,11 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 
+using Zongsoft.Common;
+
 namespace Automao.Data
 {
-	public static class ExpressionEx
+	static class ExpressionEx
 	{
 		public static string ParseOracleSql(this Expression expression, out List<object> paramers)
 		{
@@ -123,9 +125,9 @@ namespace Automao.Data
 		{
 			if(expression == parameter)
 				return GetMembers(expression.Type);
-			if(expression.GetType().FullName == "System.Linq.Expressions.PropertyExpression")
+			if(expression is MemberExpression)
 			{
-				if(IsScalarType(expression.Type))
+				if(expression.Type.IsScalarType())
 					return new string[] { ExpressionToString(expression, parameter) };
 
 				var memberName = GetMemberName(expression, parameter);
@@ -181,20 +183,7 @@ namespace Automao.Data
 			else
 				prev += ".";
 
-			return type.GetProperties(BindingFlags.Instance | BindingFlags.Public).Where(p => IsScalarType(p.PropertyType)).Select(p => prev + p.Name).ToArray();
-		}
-
-		private static bool IsScalarType(Type type)
-		{
-			if(type.IsArray)
-				return IsScalarType(type.GetElementType());
-
-			if(type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
-				return IsScalarType(type.GetGenericArguments()[0]);
-
-			return type.IsPrimitive || type.IsEnum ||
-				   type == typeof(string) || type == typeof(DateTime) ||
-				   type == typeof(Guid) || type == typeof(TimeSpan);
+			return type.GetProperties(BindingFlags.Instance | BindingFlags.Public).Where(p => p.PropertyType.IsScalarType()).Select(p => prev + p.Name).ToArray();
 		}
 	}
 
@@ -211,8 +200,16 @@ namespace Automao.Data
 			{
 				case ExpressionType.Add:
 					return "+";
+				case ExpressionType.Subtract:
+					return "-";
+				case ExpressionType.Multiply:
+					return "*";
+				case ExpressionType.Divide:
+					return "/";
 				case ExpressionType.AndAlso:
 					return "and";
+				case ExpressionType.OrElse:
+					return "or";
 				case ExpressionType.Equal:
 					return "=";
 				case ExpressionType.GreaterThan:
@@ -223,16 +220,8 @@ namespace Automao.Data
 					return "<";
 				case ExpressionType.LessThanOrEqual:
 					return "<=";
-				case ExpressionType.Multiply:
-					return "*";
 				case ExpressionType.NotEqual:
 					return "is not";
-				case ExpressionType.OrElse:
-					return "or";
-				case ExpressionType.Subtract:
-					return "-";
-				case ExpressionType.Divide:
-					return "/";
 				default:
 					throw new ArgumentOutOfRangeException("type", type.ToString());
 			}
