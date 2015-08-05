@@ -287,6 +287,9 @@ namespace Automao.Data
 			if(string.IsNullOrEmpty(name))
 				throw new ArgumentNullException("name");
 
+			if(includes == null)
+				includes = new string[0];
+
 			var info = this.MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.CurrentCultureIgnoreCase));
 			if(info == null)
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
@@ -320,7 +323,7 @@ namespace Automao.Data
 			var joinsql = string.Join(" ", tempJoinInfos.OrderBy(p => p.Target.AsIndex).Select(p => p.ToJoinSql(_caseSensitive)));
 
 			string countSql;
-			if(includes == null || includes.Length == 0)
+			if(includes.Length == 0)
 				countSql = "COUNT(0)";
 			else if(includes.Length == 1)
 				countSql = string.Format("COUNT({0})", allColumnInfos[includes[0]].ToColumn(_caseSensitive));
