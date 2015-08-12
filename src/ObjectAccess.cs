@@ -104,7 +104,10 @@ namespace Automao.Data
 			if(classNode == null)
 				throw new Exception(string.Format("未找到{0}对应的mapping节点", name));
 
-			classNode.SetEntityType(typeof(T));
+			var type = typeof(T);
+			if(type != typeof(object))
+				classNode.SetEntityType(type);
+
 			var classInfo = new ClassInfo("T", classNode);
 
 			var allColumnInfos = new Dictionary<string, ColumnInfo>();
@@ -580,38 +583,45 @@ namespace Automao.Data
 				var entityType = classInfo.ClassNode.EntityType;
 				var entity = CreateEntity<T>(entityType, values, classInfo.ClassNode);
 
-				SetNavigationProperty(classInfo, entity, row);
+				var flag = values == null || values.Count == 0 || values.All(p => p.Value is System.DBNull);
+				if(!SetNavigationProperty(classInfo, entity, row) && flag)
+					continue;
 
 				yield return entity;
 			}
 		}
 
-		private void SetNavigationProperty(ClassInfo classInfo, object entity, Dictionary<string, object> values)
+		private bool SetNavigationProperty(ClassInfo classInfo, object entity, Dictionary<string, object> values)
 		{
+			var result = false;
 			if(classInfo.Joins != null)
 			{
 				var type = entity.GetType();
 				foreach(var item in classInfo.Joins)
 				{
 					var dic = values.Where(p => p.Key.StartsWith(item.Target.AsName + "_")).ToDictionary(p => p.Key.Substring(item.Target.AsName.Length + 1), p => p.Value);
-					if(dic == null || dic.Count == 0 || dic.All(p => p.Value is System.DBNull))
-						continue;
 
 					if(IsDictionary(type))
 					{
 						((IDictionary)entity).Add(item.JoinInfo.Name, dic);
 						SetNavigationProperty(item.Target, entity, values);
+						result = true;
 						continue;
 					}
 
+					var flag = dic == null || dic.Count == 0 || dic.All(p => p.Value is System.DBNull);
 					var value = CreateEntity<object>(item.Target.ClassNode.EntityType, dic, item.Target.ClassNode);
 
-					SetNavigationProperty(item.Target, value, values);
+					if(!SetNavigationProperty(item.Target, value, values) && flag)
+						continue;
 
 					var property = type.GetProperty(item.JoinInfo.Name);
 					property.SetValue(entity, value);
+					result = true;
 				}
 			}
+
+			return result;
 		}
 
 		protected T CreateEntity<T>(Type entityType, Dictionary<string, object> propertyValues, ClassNode classNode)
