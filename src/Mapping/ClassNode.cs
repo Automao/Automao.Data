@@ -13,6 +13,10 @@ namespace Automao.Data.Mapping
 	/// </summary>
 	public class ClassNode
 	{
+		#region 静态字段
+		private static readonly object _lock = new object();
+		#endregion
+
 		#region 字段
 		private System.Threading.ThreadLocal<Type> _entityType;
 		private string _typeStr;
@@ -197,6 +201,29 @@ namespace Automao.Data.Mapping
 					_joinList.Add(join);
 				}
 			}
+		}
+
+		public PropertyNode GetPropertyNode(string property)
+		{
+			var node = this.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(property, StringComparison.OrdinalIgnoreCase));
+			if(node != null)
+				return node;
+			lock(_lock)
+			{
+				node = this.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(property, StringComparison.OrdinalIgnoreCase));
+				if(node != null)
+					return node;
+
+				var propertyInfo = this.EntityType.GetProperty(property, System.Reflection.BindingFlags.DeclaredOnly | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+				if(propertyInfo != null)
+				{
+					node = new PropertyNode(property);
+					this.PropertyNodeList.Add(node);
+					return node;
+				}
+			}
+
+			return null;
 		}
 		#endregion
 

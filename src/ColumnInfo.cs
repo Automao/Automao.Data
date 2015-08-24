@@ -139,6 +139,12 @@ namespace Automao.Data
 		#endregion
 
 		#region 静态方法
+		/// <summary>
+		/// 
+		/// </summary>
+		/// <param name="columns"></param>
+		/// <param name="root"></param>
+		/// <returns></returns>
 		public static Dictionary<string, ColumnInfo> Create(IEnumerable<string> columns, ClassInfo root)
 		{
 			var result = new Dictionary<string, ColumnInfo>();
@@ -151,7 +157,12 @@ namespace Automao.Data
 				var columnInfo = new ColumnInfo(item);
 
 				var temp = item;
-				if(!temp.Equals("count(0)", System.StringComparison.OrdinalIgnoreCase))
+				if(temp.Equals("count(0)", System.StringComparison.OrdinalIgnoreCase))
+				{
+					result.Add(item, columnInfo);
+					continue;
+				}
+				else
 				{
 					var match = Regex.Match(item, @"(?'name'.+)\((?'property'.+)\)");
 					if(match.Success)
@@ -162,97 +173,83 @@ namespace Automao.Data
 				}
 
 				var array = temp.Split('.');
-				if(array.Length > 0)
+				var key = string.Empty;
+				var host = root;
+				Join parent = null;
+				foreach(var property in array)
 				{
-					var key = string.Empty;
-					var host = root;
-					Join parent = null;
-					foreach(var property in array)
+					var joinInfo = host.ClassNode.JoinList.FirstOrDefault(p => p.Name.Equals(property, System.StringComparison.OrdinalIgnoreCase));
+					if(joinInfo == null)//不是导航属性，就当它是普通属性
 					{
-						var joinInfo = host.ClassNode.JoinList.FirstOrDefault(p => p.Name.Equals(property, System.StringComparison.OrdinalIgnoreCase));
-						if(joinInfo == null)//不是导航属性，就当它是普通属性
-						{
-							List<JoinPropertyNode> parents;
-							columnInfo._classInfo = host;
-							columnInfo._field = property;
+						List<JoinPropertyNode> parents;
+						columnInfo._classInfo = host;
+						columnInfo._field = property;
 
-							if(IsParentProperty(host.ClassNode, property, out parents))//搞定继承的问题
-							{
-								parents.Reverse();
-								var last = AddJoin(joinDic, parent, host, parents[0].Name, parents);
-								columnInfo._join = last;
-								columnInfo._subAsName = host.AsName;
-								columnInfo._classInfo = last.Target;
-							}
-							break;
+						if(IsParentProperty(host.ClassNode, 0, property, out parents))//搞定继承的问题
+						{
+							parents.Reverse();
+							var last = AddJoin(joinDic, parent, host, parents[0].Name, parents);
+							columnInfo._join = last;
+							columnInfo._subAsName = host.AsName;
+							columnInfo._classInfo = last.Target;
 						}
 
-						if(string.IsNullOrEmpty(key))
-							key = property;
-						else
-							key += "." + property;
+						break;
+					}
 
-						if(!joinDic.ContainsKey(key))
-						{
-							var join = new Join(parent, host);
-							join.JoinInfo = joinInfo;
-							join.Target = new ClassInfo("J", joinInfo.Target);
+					if(string.IsNullOrEmpty(key))
+						key = property;
+					else
+						key += "." + property;
 
-							host = join.Target;
-							parent = join;
-							columnInfo._join = join;
+					if(!joinDic.ContainsKey(key))
+					{
+						var join = new Join(parent, host);
+						join.JoinInfo = joinInfo;
+						join.Target = new ClassInfo("J", joinInfo.Target);
 
-							joinDic.Add(key, join);
-						}
-						else
-						{
-							var join = joinDic[key];
+						host = join.Target;
+						parent = join;
+						columnInfo._join = join;
 
-							columnInfo._join = join;
-							parent = join;
-							host = join.Target;
-						}
+						joinDic.Add(key, join);
+					}
+					else
+					{
+						var join = joinDic[key];
+
+						columnInfo._join = join;
+						parent = join;
+						host = join.Target;
 					}
 				}
-				else
-				{
-					columnInfo._classInfo = root;
-					columnInfo._field = temp;
-				}
 
-				result.Add(item, columnInfo);
+				if(columnInfo != null)
+					result.Add(item, columnInfo);
 			}
 
 			return result;
 		}
 
-		public static bool IsParentProperty(ClassNode host, string property, out List<JoinPropertyNode> parents)
+		public static bool IsParentProperty(ClassNode host, int floors, string property, out List<JoinPropertyNode> parents)
 		{
 			parents = null;
+			var flag = host.GetPropertyNode(property) != null;
+			if(floors == 0 && flag)
+				return false;
+
+			if(flag)
+				return true;
+
 			if(host.BaseClassNode == null)
 				return false;
 
-			if(host.PropertyNodeList.Any(p => p.Name.Equals(property, System.StringComparison.OrdinalIgnoreCase)))
-				return false;
-
-			var propertyInfo = host.EntityType.GetProperty(property, System.Reflection.BindingFlags.DeclaredOnly | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-			if(propertyInfo != null)
+			if(IsParentProperty(host.BaseClassNode, floors++, property, out parents))
 			{
-				var node = new PropertyNode(property);
-				host.PropertyNodeList.Add(node);
-				return false;
-			}
-
-			foreach(var join in host.JoinList)
-			{
-				if(host.EntityType.IsSubclassOf(join.Target.EntityType))
-				{
-					IsParentProperty(join.Target, property, out parents);
-					if(parents == null)
-						parents = new List<JoinPropertyNode>();
-					parents.Add(join);
-					return true;
-				}
+				if(parents == null)
+					parents = new List<JoinPropertyNode>();
+				parents.Add(host.JoinList.FirstOrDefault(p => p.Target == host.BaseClassNode));
+				return true;
 			}
 
 			return false;

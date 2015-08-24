@@ -26,14 +26,13 @@
 
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
 using System.Linq.Expressions;
-
 using Automao.Data.Mapping;
 using Automao.Data.Options.Configuration;
-
 using Zongsoft.Common;
 using Zongsoft.Data;
 
@@ -46,6 +45,7 @@ namespace Automao.Data
 		private bool _caseSensitive;
 		private DbProviderFactory _providerFactory;
 		private MappingInfo _mappingInfo;
+		private ConcurrentDictionary<Type, KeyValuePair<System.Reflection.ParameterInfo[], System.Reflection.PropertyInfo[]>> _typeDictionary;
 		#endregion
 
 		#region 构造函数
@@ -57,6 +57,7 @@ namespace Automao.Data
 		{
 			_caseSensitive = caseSensitive;
 			_providerFactory = providerFactory;
+			_typeDictionary = new ConcurrentDictionary<Type, KeyValuePair<System.Reflection.ParameterInfo[], System.Reflection.PropertyInfo[]>>();
 		}
 		#endregion
 
@@ -629,21 +630,33 @@ namespace Automao.Data
 			if(IsDictionary(entityType))
 				return (T)(object)propertyValues;
 
-			System.Reflection.ParameterInfo[] cpinfo = null;
-			object[] instanceArgs = null;
-			if(classNode != null)
+			KeyValuePair<System.Reflection.ParameterInfo[], System.Reflection.PropertyInfo[]> dicValue;
+			System.Reflection.ParameterInfo[] cpinfo;
+			System.Reflection.PropertyInfo[] properties;
+
+			object[] instanceArgs;
+			var constructorPropertys = classNode.PropertyNodeList.Where(p => p.PassedIntoConstructor).ToList();
+
+			if(!_typeDictionary.TryGetValue(entityType, out dicValue) || dicValue.Value == null)
 			{
-				var constructorPropertys = classNode.PropertyNodeList.Where(p => p.PassedIntoConstructor).ToList();
 				cpinfo = entityType.GetConstructors().Where(p => p.IsPublic).Select(p => p.GetParameters()).FirstOrDefault(p => p.Length == constructorPropertys.Count);
-				instanceArgs = new object[constructorPropertys.Count];
-				constructorPropertys.ForEach(p =>
-				{
-					var tempValue = propertyValues.FirstOrDefault(pp => pp.Key.Equals(p.Column, StringComparison.OrdinalIgnoreCase));
-					var args = cpinfo == null ? null : cpinfo.FirstOrDefault(pp => pp.Name.Equals(p.ConstructorName, StringComparison.OrdinalIgnoreCase));
-					if(args != null)
-						instanceArgs[args.Position] = Zongsoft.Common.Convert.ConvertValue(tempValue.Value, args.ParameterType);
-				});
+				properties = entityType.GetProperties().OrderBy(p => p.Name).ToArray();
+				_typeDictionary.TryAdd(entityType, new KeyValuePair<System.Reflection.ParameterInfo[], System.Reflection.PropertyInfo[]>(cpinfo, properties));
 			}
+			else
+			{
+				cpinfo = dicValue.Key;
+				properties = dicValue.Value;
+			}
+
+			instanceArgs = new object[constructorPropertys.Count];
+			constructorPropertys.ForEach(p =>
+			{
+				var tempValue = propertyValues.FirstOrDefault(pp => pp.Key.Equals(p.Column, StringComparison.OrdinalIgnoreCase));
+				var args = cpinfo == null ? null : cpinfo.FirstOrDefault(pp => pp.Name.Equals(p.ConstructorName, StringComparison.OrdinalIgnoreCase));
+				if(args != null)
+					instanceArgs[args.Position] = Zongsoft.Common.Convert.ConvertValue(tempValue.Value, args.ParameterType);
+			});
 
 			T entity = default(T);
 
@@ -655,9 +668,7 @@ namespace Automao.Data
 					entity = (T)Activator.CreateInstance(entityType, instanceArgs);
 			}
 
-			var properties = entityType.GetProperties();
-
-			foreach(var property in properties.OrderBy(p => p.Name))
+			foreach(var property in properties)
 			{
 				if(!property.CanWrite)
 					continue;
