@@ -871,7 +871,6 @@ namespace Automao.Data
 						subparameter.Columns.Add(new ColumnInfo("0"));
 						subparameter.Where = where;
 						subparameter.Paging = paging;
-						subparameter.ConditionOperator = ConditionOperator.In;
 
 						return string.Format("EXISTS({0})", this.CreateSelectSql(subparameter));
 					})));
