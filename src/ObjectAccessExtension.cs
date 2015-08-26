@@ -124,8 +124,16 @@ namespace Automao.Data
 							if(value is ObjectAccessResult)
 							{
 								var objectAccessResult = (ObjectAccessResult)value;
-								var sql = objectAccessResult.CreateSql(ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
-								return string.Format("{0} ({1})", clauseOperator == ConditionOperator.NotIn ? "NOT IN" : "IN", sql);
+								var parameter = new CreatingSqlParameter(true, tableIndex, joinStartIndex, valueIndex);
+								parameter.ConditionOperator = clauseOperator;
+								var result = objectAccessResult.CreateSql(parameter);
+
+								tableIndex = parameter.TableIndex;
+								joinStartIndex = parameter.JoinStartIndex;
+								valueIndex = parameter.ValueIndex;
+								values = result.Values;
+
+								return string.Format("{0} ({1})", clauseOperator == ConditionOperator.NotIn ? "NOT IN" : "IN", result.Sql);
 							}
 							return string.Format("{0} {{{1}}}", clauseOperator == ConditionOperator.NotIn ? "!=" : "=", valueIndex++);
 						}

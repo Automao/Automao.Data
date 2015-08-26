@@ -10,8 +10,8 @@ using Zongsoft.Data;
 namespace Automao.Data
 {
 	#region 委托
-	public delegate string CreateSql(ref int tableIndex, ref int joinStartIndex, ref int valueIndex, out object[] values);
-	public delegate IEnumerable<T> Execute<T>(string sql, object[] values);
+	public delegate CreateSqlResult CreateSql(CreatingSqlParameter parameter);
+	public delegate IEnumerable<T> Execute<T>(CreateSqlResult result);
 	#endregion
 
 	public class ObjectAccessResult
@@ -28,9 +28,9 @@ namespace Automao.Data
 		#endregion
 
 		#region 方法
-		public string CreateSql(ref int tableIndex, ref int joinStartIndex, ref int valueIndex, out object[] values)
+		public CreateSqlResult CreateSql(CreatingSqlParameter parameter)
 		{
-			return _createSql(ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
+			return _createSql(parameter);
 		}
 		#endregion
 	}
@@ -65,12 +65,9 @@ namespace Automao.Data
 					{
 						if(_enumerator == null)
 						{
-							var tableIndex = 0;
-							var joinStartIndex = 0;
-							var valueIndex = 0;
-							object[] values;
-							var sql = base.CreateSql(ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
-							_enumerator = _getResult(sql, values).ToList().GetEnumerator();
+							var parameter = new CreatingSqlParameter(false, 0, 0, 0);
+							var result = base.CreateSql(parameter);
+							_enumerator = _getResult(result).ToList().GetEnumerator();
 						}
 					}
 				}

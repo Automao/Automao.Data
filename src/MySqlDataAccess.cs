@@ -60,62 +60,82 @@ namespace Automao.Data
 		#endregion
 
 		#region 重写方法
-		protected override string CreateSelectSql(ClassInfo info, string columns, string where, string join, string orderby, Paging paging)
+		protected override string CreateSelectSql(CreateSelectSqlParameter parameter)
 		{
-			var sql = string.Format("SELECT {0} FROM {1}", columns, info.GetTableName(false));
-			if(!string.IsNullOrEmpty(join))
-				sql += " " + join;
-			if(!string.IsNullOrEmpty(where))
-				sql += " " + where;
+			var sql = string.Format("SELECT {0} FROM {1}", string.Join(",", parameter.Columns.Select(p => p.ToSelectColumn(false))), parameter.Info.GetTableName(false));
+			if(!string.IsNullOrEmpty(parameter.Join))
+				sql += " " + parameter.Join;
+			if(!string.IsNullOrEmpty(parameter.Where))
+				sql += " " + parameter.Where;
 
-			if(!string.IsNullOrEmpty(orderby))
-				sql += " " + orderby;
+			if(!string.IsNullOrEmpty(parameter.Orderby))
+				sql += " " + parameter.Orderby;
 
-			if(paging != null)
+			if(parameter.Paging != null)
 			{
-				if(paging.PageIndex < 1)
-					paging.PageIndex = 1;
-				sql += string.Format(" LIMIT {0},{1}", paging.PageSize * (paging.PageIndex - 1), paging.PageSize);
+				if(parameter.Paging.PageIndex < 1)
+					parameter.Paging.PageIndex = 1;
+				sql += string.Format(" LIMIT {0},{1}", parameter.Paging.PageSize * (parameter.Paging.PageIndex - 1), parameter.Paging.PageSize);
+				
+				//limit 不能出现在IN/ALL/ANY/SOME的子查询语句里面，但像下面这样包一层就可以
+				if(parameter.Subquery && (parameter.ConditionOperator == ConditionOperator.In || parameter.ConditionOperator == ConditionOperator.NotIn))
+				{
+					sql = string.Format("select {0} from ({1}) {2}", string.Join(",", parameter.Columns.Select(p =>
+					{
+						var c = p.GetColumnEx(false);
+						if(c == "0")
+							return c;
+						return string.Format("{0}.{1}", parameter.Info.AsName, c);
+					})), sql, parameter.Info.AsName);
+				}
 			}
 
 			return sql;
 		}
 
-		protected override string CreateSelectSql(ClassInfo info, string newTableNameEx, string columns, string where, string join, string group, string having, string groupedSelectColumns, string groupedJoin, string orderby, Paging paging)
+		protected override string CreateSelectSql(CreateGroupSelectSqlParameter parameter)
 		{
-			var sql = string.Format("SELECT {0} FROM {1}", columns, info.GetTableName(false));
-			if(!string.IsNullOrEmpty(join))
-				sql += " " + join;
-			if(!string.IsNullOrEmpty(where))
-				sql += " " + where;
+			var sql = string.Format("SELECT {0} FROM {1}", string.Join(",", parameter.Columns.Select(p => p.ToSelectColumn(false))), parameter.Info.GetTableName(false));
+			if(!string.IsNullOrEmpty(parameter.Join))
+				sql += " " + parameter.Join;
+			if(!string.IsNullOrEmpty(parameter.Where))
+				sql += " " + parameter.Where;
 
-			if(!string.IsNullOrEmpty(group))
-				sql += " " + group;
+			if(!string.IsNullOrEmpty(parameter.Group))
+				sql += " " + parameter.Group;
 
-			if(!string.IsNullOrEmpty(having))
-				sql += " " + having;
+			if(!string.IsNullOrEmpty(parameter.Having))
+				sql += " " + parameter.Having;
 
-			if(!string.IsNullOrEmpty(groupedSelectColumns))
+			string newColumns = string.Empty;
+			if(parameter.GroupedSelectColumns == null || parameter.GroupedSelectColumns.Count == 0)
 			{
-				var newColumns = groupedSelectColumns.Replace(info.AsName + ".", newTableNameEx + ".").Replace(info.AsName + "_", newTableNameEx + "_");
-				sql = string.Format("select {0} {1} from ({2}) {3}", newColumns.Equals("count(0)", StringComparison.OrdinalIgnoreCase) ? "" : string.Format("{0}.*,", newTableNameEx), newColumns, sql, newTableNameEx);
-				if(!string.IsNullOrEmpty(groupedJoin))
-					sql += " " + groupedJoin;
+				newColumns = string.Join(",", parameter.GroupedSelectColumns.Select(p => p.ToSelectColumn(false, parameter.Info.AsName, parameter.NewTableNameEx)));
+				sql = string.Format("select {0} {1} from ({2}) {3}", newColumns.Equals("count(0)", StringComparison.OrdinalIgnoreCase) ? "" : string.Format("{0}.*,", parameter.NewTableNameEx), newColumns, sql, parameter.NewTableNameEx);
+				if(!string.IsNullOrEmpty(parameter.GroupedJoin))
+					sql += " " + parameter.GroupedJoin;
 			}
 
-			if(!string.IsNullOrEmpty(orderby))
+			if(!string.IsNullOrEmpty(parameter.Orderby))
 			{
-				if(!string.IsNullOrEmpty(groupedSelectColumns))
-					sql += " " + orderby.Replace(info.AsName + ".", newTableNameEx + ".").Replace(info.AsName + "_", newTableNameEx + "_");
+				if(parameter.GroupedSelectColumns == null || parameter.GroupedSelectColumns.Count == 0)
+					sql += " " + parameter.Orderby.Replace(parameter.Info.AsName + ".", parameter.NewTableNameEx + ".").Replace(parameter.Info.AsName + "_", parameter.NewTableNameEx + "_");
 				else
-					sql += " " + orderby;
+					sql += " " + parameter.Orderby;
 			}
 
-			if(paging != null)
+			if(parameter.Paging != null)
 			{
-				if(paging.PageIndex < 1)
-					paging.PageIndex = 1;
-				sql += string.Format(" LIMIT {0},{1}", paging.PageSize * (paging.PageIndex - 1), paging.PageSize);
+				if(parameter.Paging.PageIndex < 1)
+					parameter.Paging.PageIndex = 1;
+				sql += string.Format(" LIMIT {0},{1}", parameter.Paging.PageSize * (parameter.Paging.PageIndex - 1), parameter.Paging.PageSize);
+
+				if(parameter.Subquery && (parameter.ConditionOperator == ConditionOperator.In || parameter.ConditionOperator == ConditionOperator.NotIn))
+				{
+					sql = string.Format("select {0} from ({1}) {2}", string.Join(",", parameter.GroupedSelectColumns.Select(p =>
+						p.ToSelectColumn(false, parameter.NewTableNameEx, parameter.NewTableNameEx)
+						)), sql, parameter.NewTableNameEx);
+				}
 			}
 
 			return sql;

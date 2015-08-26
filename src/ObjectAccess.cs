@@ -134,23 +134,35 @@ namespace Automao.Data
 			allColumns = allColumns.Concat(members);
 			allColumnInfos = ColumnInfo.Create(allColumns, classInfo);
 
-			return new ObjectAccessResult<T>((ref int tableIndex, ref int joinStartIndex, ref int valueIndex, out object[] values) =>
+			return new ObjectAccessResult<T>(p =>
 			{
-				classInfo.SetIndex(tableIndex++);
-				joinStartIndex = classInfo.SetJoinIndex(joinStartIndex);
+				classInfo.SetIndex(p.TableIndex++);
+				p.JoinStartIndex = classInfo.SetJoinIndex(p.JoinStartIndex);
 
-				var sql = CreateSelectSql(classInfo, condition, members, conditionNames, allColumnInfos, paging, grouping, sorting, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
-				return sql;
-			}, (sql, values) =>
+				var parameter = new CreatingSelectSqlParameter(p.Subquery, p.TableIndex, p.JoinStartIndex, p.ValueIndex);
+				parameter.ClassInfo = classInfo;
+				parameter.Condition = condition;
+				parameter.Members = members;
+				parameter.ConditionNames = conditionNames;
+				parameter.AllColumnInfos = allColumnInfos;
+				parameter.Paging = paging;
+				parameter.Grouping = grouping;
+				parameter.Sorting = sorting;
+				parameter.ConditionOperator = p.ConditionOperator;
+				var result = CreateSelectSql(parameter);
+				return result;
+			}, p =>
 			{
-				var tablevalues = this.Executer.Select(sql, this.CreateParameters(0, values));
+				var tablevalues = this.Executer.Select(p.Sql, this.CreateParameters(0, p.Values));
 				var result = this.SetEntityValue<T>(tablevalues, classInfo);
 				return result;
 			});
 		}
 
-		internal string CreateSelectSql(ClassInfo classInfo, ICondition condition, string[] members, string[] conditionNames, Dictionary<string, ColumnInfo> allColumnInfos, Paging paging, Grouping grouping, Sorting[] sorting, ref int tableIndex, ref int joinStartIndex, ref int valueIndex, out object[] values)
+		internal CreateSqlResult CreateSelectSql(CreatingSelectSqlParameter parameter)
 		{
+			object[] values;
+
 			Func<ColumnInfo, bool> predicate = (p =>
 			{
 				var columnInfo = p;
@@ -160,25 +172,29 @@ namespace Automao.Data
 			});
 
 			#region 要查询的列
-			var selectMembers = members.Where(p => grouping == null || p.Contains('(') && !grouping.Members.Contains(p));
-			if(grouping != null)
-				selectMembers = selectMembers.Concat(grouping.Members);
+			var selectMembers = parameter.Members.Where(p => parameter.Grouping == null || p.Contains('(') && !parameter.Grouping.Members.Contains(p));
+			if(parameter.Grouping != null)
+				selectMembers = selectMembers.Concat(parameter.Grouping.Members);
 
-			var columns = string.Join(",", selectMembers.Select(p => allColumnInfos[p]).Where(predicate).Select(p => p.ToSelectColumn(_caseSensitive)));
+			var columns = selectMembers.Select(p => parameter.AllColumnInfos[p]).Where(predicate).ToList();
 			#endregion
 
 			#region where
-			var where = condition.ToWhere(allColumnInfos, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
+			int ti = parameter.TableIndex, ji = parameter.JoinStartIndex, vi = parameter.ValueIndex;
+			var where = parameter.Condition.ToWhere(parameter.AllColumnInfos, _caseSensitive, ref ti, ref ji, ref vi, out values);
+			parameter.TableIndex = ti;
+			parameter.JoinStartIndex = ji;
+			parameter.ValueIndex = vi;
 			#endregion
 
 			#region join
 			var tempJoinInfos = new List<Join>();
-			var tempColumns = conditionNames.Concat(selectMembers);
-			if(grouping != null && grouping.Condition != null)
-				tempColumns = tempColumns.Concat(GetConditionName(grouping.Condition));
+			var tempColumns = parameter.ConditionNames.Concat(selectMembers);
+			if(parameter.Grouping != null && parameter.Grouping.Condition != null)
+				tempColumns = tempColumns.Concat(GetConditionName(parameter.Grouping.Condition));
 			foreach(var item in tempColumns.ToArray())
 			{
-				var columnInfo = allColumnInfos[item];
+				var columnInfo = parameter.AllColumnInfos[item];
 				if(columnInfo.Join != null && !tempJoinInfos.Contains(columnInfo.Join))
 				{
 					tempJoinInfos.Add(columnInfo.Join);
@@ -194,21 +210,21 @@ namespace Automao.Data
 			#region grouping
 			string having = string.Empty;
 			string group = string.Empty;
-			string groupedSelectColumns = string.Empty;
+			List<ColumnInfo> groupedSelectColumns = null;
 			string groupedJoin = string.Empty;
-			var newHostAsName = classInfo.As + (classInfo.AsIndex + 1);
-			if(grouping != null)
+			var newHostAsName = parameter.ClassInfo.As + (parameter.ClassInfo.AsIndex + 1);
+			if(parameter.Grouping != null)
 			{
-				var groupColumnInfos = grouping.Members.Select(p => allColumnInfos[p]).ToArray();
+				var groupColumnInfos = parameter.Grouping.Members.Select(p => parameter.AllColumnInfos[p]).ToArray();
 				group = string.Format("GROUP BY {0}", string.Join(",", groupColumnInfos.Select(p => p.ToColumn(_caseSensitive))));
 
-				var groupedSelectMembers = members.Where(p => !p.Contains('(') && !grouping.Members.Contains(p));
-				groupedSelectColumns = string.Join(",", groupedSelectMembers.Select(p => allColumnInfos[p]).Where(predicate).Select(p => p.ToSelectColumn(_caseSensitive)));
+				var groupedSelectMembers = parameter.Members.Where(p => !p.Contains('(') && !parameter.Grouping.Members.Contains(p));
+				groupedSelectColumns = groupedSelectMembers.Select(p => parameter.AllColumnInfos[p]).Where(predicate).ToList();
 
 				tempJoinInfos = new List<Join>();
 				foreach(var item in groupedSelectMembers)
 				{
-					var columnInfo = allColumnInfos[item];
+					var columnInfo = parameter.AllColumnInfos[item];
 					if(columnInfo.Join != null && !tempJoinInfos.Contains(columnInfo.Join))
 					{
 						tempJoinInfos.Add(columnInfo.Join);
@@ -241,48 +257,99 @@ namespace Automao.Data
 					return p.ToJoinSql(_caseSensitive);
 				}));
 
-				if(grouping.Condition != null)
+				if(parameter.Grouping.Condition != null)
 				{
 					object[] tempValues;
-					having = grouping.Condition.ToWhere(allColumnInfos, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out tempValues, "HAVING {0}");
+					ti = parameter.TableIndex;
+					ji = parameter.JoinStartIndex;
+					vi = parameter.ValueIndex;
+					having = parameter.Grouping.Condition.ToWhere(parameter.AllColumnInfos, _caseSensitive, ref ti, ref ji, ref vi, out tempValues, "HAVING {0}");
 					values = values.Concat(tempValues).ToArray();
 				}
 			}
 			#endregion
 
-			var orderby = sorting == null || sorting.Length == 0 ? "" : string.Format("ORDER BY {0}", string.Join(",", sorting.Select(p => p.Parse(allColumnInfos, _caseSensitive))));
+			var orderby = parameter.Sorting == null || parameter.Sorting.Length == 0 ? "" : string.Format("ORDER BY {0}", string.Join(",", parameter.Sorting.Select(p => p.Parse(parameter.AllColumnInfos, _caseSensitive))));
 
 			string sql;
 			if(string.IsNullOrEmpty(group))
-				sql = CreateSelectSql(classInfo, columns, where, join, orderby, paging);
-			else
-				sql = CreateSelectSql(classInfo, newHostAsName, columns, where, join,
-					group, having, groupedSelectColumns, groupedJoin, orderby, paging);
+			{
+				var subparameter = new CreateSelectSqlParameter(parameter.Subquery);
+				subparameter.Info = parameter.ClassInfo;
+				subparameter.Columns = columns;
+				subparameter.Where = where;
+				subparameter.Join = join;
+				subparameter.Orderby = orderby;
+				subparameter.Paging = parameter.Paging;
+				subparameter.ConditionOperator = parameter.ConditionOperator;
 
-			if(paging != null && paging.TotalCount == 0)
+				sql = CreateSelectSql(subparameter);
+			}
+			else
+			{
+				var subparameter = new CreateGroupSelectSqlParameter(parameter.Subquery);
+				subparameter.Info = parameter.ClassInfo;
+				subparameter.NewTableNameEx = newHostAsName;
+				subparameter.Columns = columns;
+				subparameter.Where = where;
+				subparameter.Join = join;
+				subparameter.Group = group;
+				subparameter.Having = having;
+				subparameter.GroupedSelectColumns = groupedSelectColumns;
+				subparameter.GroupedJoin = groupedJoin;
+				subparameter.Orderby = orderby;
+				subparameter.Paging = parameter.Paging;
+				subparameter.ConditionOperator = parameter.ConditionOperator;
+
+				sql = CreateSelectSql(subparameter);
+			}
+
+			if(parameter.Paging != null && parameter.Paging.TotalCount == 0)
 			{
 				var countSql = string.Empty;
 				if(string.IsNullOrEmpty(group))
-					countSql = CreateSelectSql(classInfo, "COUNT(0)", where, join, null, null);
+				{
+					var subparameter = new CreateSelectSqlParameter(false);
+					subparameter.Info = parameter.ClassInfo;
+					subparameter.Columns = new List<ColumnInfo>();
+					subparameter.Columns.Add(new ColumnInfo("COUNT(0)"));
+					subparameter.Where = where;
+					subparameter.Join = join;
+
+					countSql = CreateSelectSql(subparameter);
+				}
 				else
-					countSql = CreateSelectSql(classInfo, newHostAsName, columns, where, join,
-						group, having, "COUNT(0)", groupedJoin, null, null);
+				{
+					var subparameter = new CreateGroupSelectSqlParameter(false);
+					subparameter.Info = parameter.ClassInfo;
+					subparameter.NewTableNameEx = newHostAsName;
+					subparameter.Columns = columns;
+					subparameter.Where = where;
+					subparameter.Join = join;
+					subparameter.Group = group;
+					subparameter.Having = having;
+					subparameter.GroupedSelectColumns = new List<ColumnInfo>();
+					subparameter.GroupedSelectColumns.Add(new ColumnInfo("COUNT(0)"));
+					subparameter.GroupedJoin = groupedJoin;
+
+					countSql = CreateSelectSql(subparameter);
+				}
 
 				var tablevalues = this.Executer.Select(countSql, CreateParameters(0, values));
 
 				if(tablevalues != null)
 				{
 					var item = tablevalues.FirstOrDefault();
-					paging.TotalCount = Zongsoft.Common.Convert.ConvertValue<int>(item.Values.First());
+					parameter.Paging.TotalCount = Zongsoft.Common.Convert.ConvertValue<int>(item.Values.First());
 				}
 			}
 
-			return sql;
+			return new CreateSqlResult(sql, values);
 		}
 
-		protected abstract string CreateSelectSql(ClassInfo info, string columns, string where, string join, string orderby, Paging paging);
+		protected abstract string CreateSelectSql(CreateSelectSqlParameter parameter);
 
-		protected abstract string CreateSelectSql(ClassInfo info, string newTableNameEx, string columns, string where, string join, string group, string having, string groupedSelectColumns, string groupedJoin, string orderby, Paging paging);
+		protected abstract string CreateSelectSql(CreateGroupSelectSqlParameter parameter);
 		#endregion
 
 		#region Count
@@ -798,7 +865,15 @@ namespace Automao.Data
 					item.Parent.AddJoinWhere(string.Join(" AND ", item.JoinInfo.Member.Select(p =>
 					{
 						var where = string.Format(whereformat, tempClassInfo.AsName, p.Value.Column, item.Host.AsName, p.Key.Column);
-						return string.Format("EXISTS({0})", this.CreateSelectSql(tempClassInfo, "0", where, null, null, paging));
+						var subparameter = new CreateSelectSqlParameter(true);
+						subparameter.Info = tempClassInfo;
+						subparameter.Columns = new List<ColumnInfo>();
+						subparameter.Columns.Add(new ColumnInfo("0"));
+						subparameter.Where = where;
+						subparameter.Paging = paging;
+						subparameter.ConditionOperator = ConditionOperator.In;
+
+						return string.Format("EXISTS({0})", this.CreateSelectSql(subparameter));
 					})));
 
 					item.ChangeMode(JoinType.Left);
