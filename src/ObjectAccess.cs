@@ -139,7 +139,7 @@ namespace Automao.Data
 				classInfo.SetIndex(p.TableIndex++);
 				p.JoinStartIndex = classInfo.SetJoinIndex(p.JoinStartIndex);
 
-				var parameter = new CreatingSelectSqlParameter(p.Subquery, p.TableIndex, p.JoinStartIndex, p.ValueIndex);
+				var parameter = new CreatingSelectSqlParameter(p);
 				parameter.ClassInfo = classInfo;
 				parameter.Condition = condition;
 				parameter.Members = members;
@@ -149,8 +149,7 @@ namespace Automao.Data
 				parameter.Grouping = grouping;
 				parameter.Sorting = sorting;
 				parameter.ConditionOperator = p.ConditionOperator;
-				var result = CreateSelectSql(parameter);
-				return result;
+				return CreateSelectSql(parameter);
 			}, p =>
 			{
 				var tablevalues = this.Executer.Select(p.Sql, this.CreateParameters(0, p.Values));

@@ -87,8 +87,8 @@ namespace Automao.Data
 				var transaction = Transaction.Current;
 				if(transaction != null)
 				{
-					var connection = transaction.Information.Arguments.ContainsKey(_connection_ArgumentsKey)
-						? transaction.Information.Arguments[_connection_ArgumentsKey] as DbConnection
+					var connection = transaction.Information.Parameters.ContainsKey(_connection_ArgumentsKey)
+						? transaction.Information.Parameters[_connection_ArgumentsKey] as DbConnection
 						: null;
 
 					if(connection == null)
@@ -102,8 +102,8 @@ namespace Automao.Data
 						var dbTransaction = connection.BeginTransaction(isolationLevel);
 
 						//设置当前事务的环境参数
-						transaction.Information.Arguments[_connection_ArgumentsKey] = connection;
-						transaction.Information.Arguments[_transaction_ArgumentsKey] = dbTransaction;
+						transaction.Information.Parameters[_connection_ArgumentsKey] = connection;
+						transaction.Information.Parameters[_transaction_ArgumentsKey] = dbTransaction;
 
 						transaction.Enlist(this);
 					}
@@ -134,7 +134,7 @@ namespace Automao.Data
 			{
 				var transaction = Transaction.Current;
 				if(transaction != null)
-					return transaction.Information.Arguments[_transaction_ArgumentsKey] as DbTransaction;
+					return transaction.Information.Parameters[_transaction_ArgumentsKey] as DbTransaction;
 				return null;
 			}
 		}
@@ -178,7 +178,7 @@ namespace Automao.Data
 
 				var transaction = DbTransaction;
 				var startTransaction = transaction != null;
-				if(startTransaction)
+				if(startTransaction && !Transaction.Current.IsCompleted)
 					command.Transaction = transaction;
 
 				if(connection.State == ConnectionState.Broken)
@@ -229,7 +229,7 @@ namespace Automao.Data
 
 				var transaction = DbTransaction;
 				var startTransaction = transaction != null;
-				if(startTransaction)
+				if(startTransaction && !Transaction.Current.IsCompleted)
 					command.Transaction = transaction;
 
 				if(connection.State == ConnectionState.Broken)
@@ -264,6 +264,9 @@ namespace Automao.Data
 		{
 			if(string.IsNullOrEmpty(sql))
 				throw new ArgumentNullException("formatSql");
+
+			if(Transaction.Current != null && Transaction.Current.IsCompleted)
+				return -1;
 
 			var connection = DbConnection;
 

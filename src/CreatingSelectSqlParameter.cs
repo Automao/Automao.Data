@@ -13,9 +13,10 @@ namespace Automao.Data
 	public class CreatingSelectSqlParameter : CreatingSqlParameter
 	{
 		#region 构造函数
-		public CreatingSelectSqlParameter(bool subquery, int tableIndex, int joinStartIndex, int valueIndex)
-			: base(subquery, tableIndex, joinStartIndex, valueIndex)
+		public CreatingSelectSqlParameter(CreatingSqlParameter paremeter)
+			: base(paremeter.Subquery, paremeter.TableIndex, paremeter.JoinStartIndex, paremeter.ValueIndex)
 		{
+			base.SyncModel = paremeter;
 		}
 		#endregion
 

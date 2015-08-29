@@ -76,7 +76,7 @@ namespace Automao.Data
 				if(parameter.Paging.PageIndex < 1)
 					parameter.Paging.PageIndex = 1;
 				sql += string.Format(" LIMIT {0},{1}", parameter.Paging.PageSize * (parameter.Paging.PageIndex - 1), parameter.Paging.PageSize);
-				
+
 				//limit 不能出现在IN/ALL/ANY/SOME的子查询语句里面，但像下面这样包一层就可以
 				if(parameter.Subquery && (parameter.ConditionOperator == ConditionOperator.In || parameter.ConditionOperator == ConditionOperator.NotIn))
 				{
@@ -108,9 +108,15 @@ namespace Automao.Data
 				sql += " " + parameter.Having;
 
 			string newColumns = string.Empty;
-			if(parameter.GroupedSelectColumns == null || parameter.GroupedSelectColumns.Count == 0)
+			if(parameter.GroupedSelectColumns != null && parameter.GroupedSelectColumns.Count > 0)
 			{
-				newColumns = string.Join(",", parameter.GroupedSelectColumns.Select(p => p.ToSelectColumn(false, parameter.Info.AsName, parameter.NewTableNameEx)));
+				newColumns = string.Join(",", parameter.GroupedSelectColumns.Select(p =>
+				{
+					if(p.ClassInfo == parameter.Info)
+						return p.ToSelectColumn(false, parameter.NewTableNameEx, parameter.NewTableNameEx);
+					else
+						return p.ToSelectColumn(false);
+				}));
 				sql = string.Format("select {0} {1} from ({2}) {3}", newColumns.Equals("count(0)", StringComparison.OrdinalIgnoreCase) ? "" : string.Format("{0}.*,", parameter.NewTableNameEx), newColumns, sql, parameter.NewTableNameEx);
 				if(!string.IsNullOrEmpty(parameter.GroupedJoin))
 					sql += " " + parameter.GroupedJoin;

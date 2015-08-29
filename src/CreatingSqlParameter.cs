@@ -27,7 +27,7 @@ namespace Automao.Data
 			_tableIndex = tableIndex;
 			_joinStartIndex = joinStartIndex;
 			_valueIndex = valueIndex;
-		} 
+		}
 		#endregion
 
 		#region 属性
@@ -52,6 +52,8 @@ namespace Automao.Data
 			set
 			{
 				_tableIndex = value;
+				if(SyncModel != null)
+					SyncModel._tableIndex = value;
 			}
 		}
 
@@ -64,6 +66,8 @@ namespace Automao.Data
 			set
 			{
 				_joinStartIndex = value;
+				if(SyncModel != null)
+					SyncModel._joinStartIndex = value;
 			}
 		}
 
@@ -76,6 +80,8 @@ namespace Automao.Data
 			set
 			{
 				_valueIndex = value;
+				if(SyncModel != null)
+					SyncModel._valueIndex = value;
 			}
 		}
 
@@ -92,6 +98,12 @@ namespace Automao.Data
 			{
 				_conditionOperator = value;
 			}
+		}
+
+		protected CreatingSqlParameter SyncModel
+		{
+			get;
+			set;
 		}
 		#endregion
 	}
