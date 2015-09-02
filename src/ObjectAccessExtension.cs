@@ -223,7 +223,7 @@ namespace Automao.Data
 		{
 			if(where.Value == null)
 				return new object[0];
-			else if(where.Value is string || where.Value is byte[] || where.Value is ObjectAccessResult)
+			else if(where.Value is string || where.Value is ObjectAccessResult)
 				return new[] { where.Value };
 			else if(where.Value is object[])
 				return (object[])where.Value;
