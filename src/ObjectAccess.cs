@@ -635,6 +635,50 @@ namespace Automao.Data
 		}
 		#endregion
 
+		#region 是否存在
+		public override bool Exists(string name, ICondition condition)
+		{
+			if(string.IsNullOrEmpty(name))
+				throw new ArgumentNullException("name");
+
+			var info = this.MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.CurrentCultureIgnoreCase));
+			if(info == null)
+				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
+
+			var joinInfos = new Dictionary<string, Join>();
+			var allColumnInfos = new Dictionary<string, ColumnInfo>();
+
+			var allcolumns = GetConditionName(condition);
+
+			var classInfo = new ClassInfo("T", info);
+			allColumnInfos = ColumnInfo.Create(allcolumns, classInfo);
+			classInfo.SetJoinIndex(0);
+
+			int tableIndex = 0;
+			int joinStartIndex = 0;
+			int valueIndex = 0;
+			object[] values;
+			var whereSql = condition.ToWhere(allColumnInfos, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
+
+			var tempJoinInfos = new List<Join>();
+			foreach(var item in allColumnInfos.Keys)
+			{
+				var columnInfo = allColumnInfos[item];
+				if(columnInfo.Join != null && !tempJoinInfos.Contains(columnInfo.Join))
+				{
+					tempJoinInfos.Add(columnInfo.Join);
+					tempJoinInfos.AddRange(columnInfo.Join.GetParent(p => tempJoinInfos.Contains(p)));
+				}
+			}
+			var joinsql = string.Join(" ", tempJoinInfos.OrderBy(p => p.Target.AsIndex).Select(p => p.ToJoinSql(_caseSensitive)));
+
+			var sql = string.Format("SELECT 0 FROM {0} {1} {2} LIMIT 0,1", classInfo.GetTableName(_caseSensitive), joinsql, whereSql);
+
+			var result = Executer.ExecuteScalar(sql, CreateParameters(0, values));
+			return result != null;
+		}
+		#endregion
+
 		protected override Type GetEntityType(string name)
 		{
 			return MappingInfo.ClassNodeList.Where(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Select(p => p.EntityType).FirstOrDefault();
