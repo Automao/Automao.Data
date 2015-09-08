@@ -86,6 +86,8 @@ namespace Automao.Data.Mapping
 		public void Init(ClassNode host, List<ClassNode> all)
 		{
 			_target = all.FirstOrDefault(p => p.Name.Equals(_targetStr, StringComparison.OrdinalIgnoreCase));
+			if(_target == null)
+				throw new Exception(string.Format("未找到{0}对应的节点,source:{1},join:{1}", _targetStr, host.Name, _name));
 
 			_member = new Dictionary<PropertyNode, PropertyNode>();
 			foreach(var key in _temp.Keys)
