@@ -105,11 +105,13 @@ namespace Automao.Data
 			var columnformat = caseSensitive ? "{0}\"{1}\"" : "{0}{1}";
 			var field = PropertyNode != null ? _propertyNode.Column : _field;
 			if(field == "0" || field.Equals("count(0)", System.StringComparison.OrdinalIgnoreCase))
-				return field.ToUpper();
-			if(!string.IsNullOrEmpty(_aggregateFunctionName))
-				return string.Format(caseSensitive ? "{0}({1}\"{2}\")" : "{0}({1}{2})", _aggregateFunctionName.ToUpper(), asName, field);
+				_selectColumn = field.ToUpper();
+			else if(!string.IsNullOrEmpty(_aggregateFunctionName))
+				_selectColumn = string.Format(caseSensitive ? "{0}({1}\"{2}\")" : "{0}({1}{2})", _aggregateFunctionName.ToUpper(), asName, field);
+			else
+				_selectColumn = string.Format(columnformat, asName, field);
 
-			_selectColumn = string.Format(columnformat, asName, field) + " " + GetColumnEx(caseSensitive, columnAsName);
+			_selectColumn += " " + GetColumnEx(caseSensitive, columnAsName);
 			return _selectColumn;
 		}
 
@@ -122,7 +124,7 @@ namespace Automao.Data
 			var field = PropertyNode != null ? _propertyNode.Column : _field;
 
 			if(field == "0")
-				return field;
+				return string.Format("{0}_0", asName);
 			if(field.Equals("count(0)", System.StringComparison.OrdinalIgnoreCase))
 				return string.Format(caseSensitive ? "\"{0}_Count\"" : "{0}_Count", asName);
 			if(!string.IsNullOrEmpty(_aggregateFunctionName))

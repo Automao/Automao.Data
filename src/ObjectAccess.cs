@@ -705,7 +705,7 @@ namespace Automao.Data
 		private bool SetNavigationProperty(ClassInfo classInfo, object entity, Dictionary<string, object> values)
 		{
 			var result = false;
-			if(classInfo.Joins != null)
+			if(classInfo.Joins != null && classInfo.Joins.Count > 0)
 			{
 				var type = entity.GetType();
 				foreach(var item in classInfo.Joins)
@@ -714,8 +714,8 @@ namespace Automao.Data
 
 					if(IsDictionary(type))
 					{
+						SetNavigationProperty(item.Target, dic, values);
 						((IDictionary)entity).Add(item.JoinInfo.Name, dic);
-						SetNavigationProperty(item.Target, entity, values);
 						result = true;
 						continue;
 					}
@@ -937,10 +937,11 @@ namespace Automao.Data
 			if(type.IsSubclassOf(typeof(Dictionary<string, object>)))
 				return false;
 
-			return type == typeof(IDictionary<string, object>)
+			return type == typeof(Dictionary<string, object>)
+				|| type == typeof(IDictionary<string, object>)
 				|| type == typeof(IDictionary)
-				|| type.IsSubclassOf(typeof(IDictionary<string, object>))
-				|| type.IsSubclassOf(typeof(IDictionary));
+				|| type.GetInterface(typeof(IDictionary<string, object>).Name) != null
+				|| type.GetInterface(typeof(IDictionary).Name) != null;
 		}
 		#endregion
 	}
