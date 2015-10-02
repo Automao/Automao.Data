@@ -96,7 +96,7 @@ namespace Automao.Data.Mapping
 				if(fromPropertyInfo == null)
 				{
 					fromPropertyInfo = new PropertyNode(key);
-					host.PropertyNodeList.Add(fromPropertyInfo);
+					host.AddPropertyNodel(fromPropertyInfo);
 				}
 
 				var value = _temp[key];
@@ -104,7 +104,7 @@ namespace Automao.Data.Mapping
 				if(toPropertyInfo == null)
 				{
 					toPropertyInfo = new PropertyNode(value);
-					_target.PropertyNodeList.Add(toPropertyInfo);
+					_target.AddPropertyNodel(toPropertyInfo);
 				}
 
 				_member.Add(fromPropertyInfo, toPropertyInfo);

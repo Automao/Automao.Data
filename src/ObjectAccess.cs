@@ -688,10 +688,13 @@ namespace Automao.Data
 		#region 方法
 		internal IEnumerable<T> SetEntityValue<T>(IEnumerable<Dictionary<string, object>> table, ClassInfo classInfo)
 		{
+			var entityType = typeof(T);
+			if(entityType == typeof(object))
+				entityType = classInfo.ClassNode.EntityType;
+
 			foreach(var row in table)
 			{
 				var values = row.Where(p => p.Key.StartsWith(classInfo.AsName + "_")).ToDictionary(p => p.Key.Substring(classInfo.AsName.Length + 1), p => p.Value);
-				var entityType = classInfo.ClassNode.EntityType;
 				var entity = CreateEntity<T>(entityType, values, classInfo.ClassNode);
 
 				var flag = values == null || values.Count == 0 || values.All(p => p.Value is System.DBNull);

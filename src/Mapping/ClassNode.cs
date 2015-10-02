@@ -205,25 +205,35 @@ namespace Automao.Data.Mapping
 
 		public PropertyNode GetPropertyNode(string property)
 		{
-			var node = this.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(property, StringComparison.OrdinalIgnoreCase));
+			var node = _propertyNodeList.FirstOrDefault(p => p.Name.Equals(property, StringComparison.OrdinalIgnoreCase));
 			if(node != null)
 				return node;
-			lock(_lock)
-			{
-				node = this.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(property, StringComparison.OrdinalIgnoreCase));
-				if(node != null)
-					return node;
 
-				var propertyInfo = this.EntityType.GetProperty(property, System.Reflection.BindingFlags.DeclaredOnly | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-				if(propertyInfo != null)
-				{
-					node = new PropertyNode(property);
-					this.PropertyNodeList.Add(node);
-					return node;
-				}
+			var propertyInfo = this.EntityType.GetProperty(property, System.Reflection.BindingFlags.DeclaredOnly | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+			if(propertyInfo != null)
+			{
+				node = new PropertyNode(property);
+				AddPropertyNodel(node);
+				return node;
 			}
 
 			return null;
+		}
+
+		public void AddPropertyNodel(PropertyNode node)
+		{
+			if(_propertyNodeList.Any(p => p.Name.Equals(node.Name, StringComparison.OrdinalIgnoreCase)))
+				return;
+
+			lock(_lock)
+			{
+				if(_propertyNodeList.Any(p => p.Name.Equals(node.Name, StringComparison.OrdinalIgnoreCase)))
+					return;
+
+				var list = new List<PropertyNode>(_propertyNodeList);
+				list.Add(node);
+				_propertyNodeList = list;
+			}
 		}
 		#endregion
 
@@ -265,7 +275,7 @@ namespace Automao.Data.Mapping
 						if(string.IsNullOrWhiteSpace(keyPropertyInfo.Name))
 							throw new FormatException(string.Format("{0}节点下面有一个主键没有name属性", info.Name));
 						keyPropertyInfo.IsKey = true;
-						info.PropertyNodeList.Add(keyPropertyInfo);
+						info.AddPropertyNodel(keyPropertyInfo);
 					}
 					continue;
 				}
@@ -280,7 +290,7 @@ namespace Automao.Data.Mapping
 				if(string.IsNullOrWhiteSpace(propertyInfo.Name))
 					throw new FormatException(string.Format("{0}节点下面有一个property节点没有name属性", info.Name));
 
-				info.PropertyNodeList.Add(propertyInfo);
+				info.AddPropertyNodel(propertyInfo);
 			}
 
 			return info;
