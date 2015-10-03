@@ -105,10 +105,6 @@ namespace Automao.Data
 			if(classNode == null)
 				throw new Exception(string.Format("未找到{0}对应的mapping节点", name));
 
-			var type = typeof(T);
-			if(type != typeof(object))
-				classNode.SetEntityType(type);
-
 			var classInfo = new ClassInfo("T", classNode);
 
 			var allColumnInfos = new Dictionary<string, ColumnInfo>();
@@ -480,7 +476,7 @@ namespace Automao.Data
 			outParameters = dic.ToDictionary(p => p.Key, p => p.Value);
 
 			if(classInfo != null)
-				return tablevalues.Select(p => CreateEntity<object>(classInfo.EntityType, p, classInfo));
+				return tablevalues.Select(p => CreateEntity(classInfo.EntityType, p, classInfo));
 			else
 			{
 				var item = tablevalues.FirstOrDefault();
@@ -689,19 +685,19 @@ namespace Automao.Data
 		internal IEnumerable<T> SetEntityValue<T>(IEnumerable<Dictionary<string, object>> table, ClassInfo classInfo)
 		{
 			var entityType = typeof(T);
-			if(entityType == typeof(object))
+			if(!entityType.IsDictionary())
 				entityType = classInfo.ClassNode.EntityType;
 
 			foreach(var row in table)
 			{
 				var values = row.Where(p => p.Key.StartsWith(classInfo.AsName + "_")).ToDictionary(p => p.Key.Substring(classInfo.AsName.Length + 1), p => p.Value);
-				var entity = CreateEntity<T>(entityType, values, classInfo.ClassNode);
+				var entity = CreateEntity(entityType, values, classInfo.ClassNode);
 
 				var flag = values == null || values.Count == 0 || values.All(p => p.Value is System.DBNull);
 				if(!SetNavigationProperty(classInfo, entity, row) && flag)
 					continue;
 
-				yield return entity;
+				yield return (T)entity;
 			}
 		}
 
@@ -715,7 +711,7 @@ namespace Automao.Data
 				{
 					var dic = values.Where(p => p.Key.StartsWith(item.Target.AsName + "_")).ToDictionary(p => p.Key.Substring(item.Target.AsName.Length + 1), p => p.Value);
 
-					if(IsDictionary(type))
+					if(type.IsDictionary())
 					{
 						SetNavigationProperty(item.Target, dic, values);
 						((IDictionary)entity).Add(item.JoinInfo.Name, dic);
@@ -724,7 +720,7 @@ namespace Automao.Data
 					}
 
 					var flag = dic == null || dic.Count == 0 || dic.All(p => p.Value is System.DBNull);
-					var value = CreateEntity<object>(item.Target.ClassNode.EntityType, dic, item.Target.ClassNode);
+					var value = CreateEntity(item.Target.ClassNode.EntityType, dic, item.Target.ClassNode);
 
 					if(!SetNavigationProperty(item.Target, value, values) && flag)
 						continue;
@@ -738,10 +734,10 @@ namespace Automao.Data
 			return result;
 		}
 
-		protected T CreateEntity<T>(Type entityType, Dictionary<string, object> propertyValues, ClassNode classNode)
+		protected object CreateEntity(Type entityType, Dictionary<string, object> propertyValues, ClassNode classNode)
 		{
-			if(IsDictionary(entityType))
-				return (T)(object)propertyValues;
+			if(entityType.IsDictionary())
+				return propertyValues;
 
 			KeyValuePair<System.Reflection.ParameterInfo[], System.Reflection.PropertyInfo[]> dicValue;
 			System.Reflection.ParameterInfo[] cpinfo;
@@ -771,15 +767,13 @@ namespace Automao.Data
 					instanceArgs[args.Position] = Zongsoft.Common.Convert.ConvertValue(tempValue.Value, args.ParameterType);
 			});
 
-			T entity = default(T);
+			object entity;
 
-			if(entity == null)
-			{
-				if(instanceArgs.Length == 0 && typeof(T) != typeof(object))
-					entity = Activator.CreateInstance<T>();
-				else
-					entity = (T)Activator.CreateInstance(entityType, instanceArgs);
-			}
+			if(instanceArgs.Length == 0)
+				entity = Activator.CreateInstance(entityType);
+			else
+				entity = Activator.CreateInstance(entityType, instanceArgs);
+
 
 			foreach(var property in properties)
 			{
@@ -933,18 +927,6 @@ namespace Automao.Data
 				return false;
 
 			return join.Parent.JoinInfo.Type == JoinType.Left || ParentHasLeftJoin(join.Parent);
-		}
-
-		private bool IsDictionary(Type type)
-		{
-			if(type.IsSubclassOf(typeof(Dictionary<string, object>)))
-				return false;
-
-			return type == typeof(Dictionary<string, object>)
-				|| type == typeof(IDictionary<string, object>)
-				|| type == typeof(IDictionary)
-				|| type.GetInterface(typeof(IDictionary<string, object>).Name) != null
-				|| type.GetInterface(typeof(IDictionary).Name) != null;
 		}
 		#endregion
 	}

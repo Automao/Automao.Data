@@ -18,7 +18,6 @@ namespace Automao.Data.Mapping
 		#endregion
 
 		#region 字段
-		private System.Threading.ThreadLocal<Type> _entityType;
 		private string _typeStr;
 		private Type _type;
 		private string _name;
@@ -28,13 +27,6 @@ namespace Automao.Data.Mapping
 		private List<JoinPropertyNode> _joinList;
 		private string _inherit;
 		private ClassNode _base;
-		#endregion
-
-		#region 构造函数
-		public ClassNode()
-		{
-			_entityType = new System.Threading.ThreadLocal<Type>();
-		}
 		#endregion
 
 		#region 属性
@@ -136,21 +128,17 @@ namespace Automao.Data.Mapping
 		{
 			get
 			{
-				if(_entityType.Value == null)
+				if(_type != null)
+					return _type;
+
+				if(!string.IsNullOrEmpty(_typeStr))
 				{
+					_type = System.Type.GetType(_typeStr);
 					if(_type != null)
 						return _type;
-
-					if(!string.IsNullOrEmpty(_typeStr))
-					{
-						_type = System.Type.GetType(_typeStr);
-						if(_type != null)
-							return _type;
-						throw new Exception(string.Format("当前节点({0})的Type出错", Name));
-					}
-					throw new Exception(string.Format("当前节点({0})的Type未设置", Name));
+					throw new Exception(string.Format("当前节点({0})的Type出错", Name));
 				}
-				return _entityType.Value;
+				throw new Exception(string.Format("当前节点({0})的Type未设置", Name));
 			}
 		}
 		#endregion
@@ -163,27 +151,25 @@ namespace Automao.Data.Mapping
 			return tableName;
 		}
 
-		/// <summary>
-		/// 设置不同于配置的类型
-		/// </summary>
-		/// <param name="type"></param>
-		public void SetEntityType(Type type)
-		{
-			if(!string.IsNullOrEmpty(_typeStr) && EntityType == type)
-				return;
+		///// <summary>
+		///// 设置不同于配置的类型
+		///// </summary>
+		///// <param name="type"></param>
+		//public void SetEntityType(Type type)
+		//{
+		//	if(!string.IsNullOrEmpty(_typeStr) && EntityType == type)
+		//		return;
 
-			_entityType.Value = type;
-
-			foreach(var item in JoinList)
-			{
-				var propertyInfo = type.GetProperty(item.Name);
-				if(propertyInfo != null)
-				{
-					if(string.IsNullOrEmpty(item.Target._typeStr) || item.Target.EntityType != propertyInfo.PropertyType)
-						item.Target.SetEntityType(propertyInfo.PropertyType);
-				}
-			}
-		}
+		//	foreach(var item in JoinList)
+		//	{
+		//		var propertyInfo = type.GetProperty(item.Name);
+		//		if(propertyInfo != null)
+		//		{
+		//			if(string.IsNullOrEmpty(item.Target._typeStr) || item.Target.EntityType != propertyInfo.PropertyType)
+		//				item.Target.SetEntityType(propertyInfo.PropertyType);
+		//		}
+		//	}
+		//}
 
 		public void Init(List<ClassNode> all)
 		{

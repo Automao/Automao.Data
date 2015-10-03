@@ -59,6 +59,7 @@
     <Compile Include="MySqlDataAccess.cs" />
     <Compile Include="Mapping\ProcedureNode.cs" />
     <Compile Include="Mapping\ProcedureParameterNode.cs" />
+    <Compile Include="ObjectExtension.cs" />
     <Compile Include="SqlExecuter.cs" />
     <Compile Include="ExpressionEx.cs" />
     <Compile Include="Mapping\MappingInfo.cs" />
