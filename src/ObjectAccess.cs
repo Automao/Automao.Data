@@ -701,9 +701,16 @@ namespace Automao.Data
 			}
 		}
 
+		/// <summary>
+		/// 
+		/// </summary>
+		/// <param name="classInfo"></param>
+		/// <param name="entity"></param>
+		/// <param name="values"></param>
+		/// <returns>返回值表示是否成功创建导航属性</returns>
 		private bool SetNavigationProperty(ClassInfo classInfo, object entity, Dictionary<string, object> values)
 		{
-			var result = false;
+			var success = false;
 			if(classInfo.Joins != null && classInfo.Joins.Count > 0)
 			{
 				var type = entity.GetType();
@@ -715,23 +722,28 @@ namespace Automao.Data
 					{
 						SetNavigationProperty(item.Target, dic, values);
 						((IDictionary)entity).Add(item.JoinInfo.Name, dic);
-						result = true;
+						success = true;
 						continue;
 					}
 
-					var flag = dic == null || dic.Count == 0 || dic.All(p => p.Value is System.DBNull);
-					var value = CreateEntity(item.Target.ClassNode.EntityType, dic, item.Target.ClassNode);
+					//flag=true也要创建一个空实体，因为可能要创建这个空实体的导航属性
+					var propertyValue = CreateEntity(item.Target.ClassNode.EntityType, dic, item.Target.ClassNode);
 
-					if(!SetNavigationProperty(item.Target, value, values) && flag)
+					if(propertyValue == null)
+						return false;
+
+					var flag = dic == null || dic.Count == 0 || dic.All(p => p.Value is System.DBNull);
+
+					if(!SetNavigationProperty(item.Target, propertyValue, values) && flag)
 						continue;
 
 					var property = type.GetProperty(item.JoinInfo.Name);
-					property.SetValue(entity, value);
-					result = true;
+					property.SetValue(entity, propertyValue);
+					success = true;
 				}
 			}
 
-			return result;
+			return success;
 		}
 
 		protected object CreateEntity(Type entityType, Dictionary<string, object> propertyValues, ClassNode classNode)
@@ -772,7 +784,19 @@ namespace Automao.Data
 			if(instanceArgs.Length == 0)
 				entity = Activator.CreateInstance(entityType);
 			else
-				entity = Activator.CreateInstance(entityType, instanceArgs);
+			{
+				try
+				{
+					entity = Activator.CreateInstance(entityType, instanceArgs);
+				}
+				catch
+				{
+					if(propertyValues.Count == 0 || propertyValues.All(p => p.Value == DBNull.Value))
+						return null;
+					else
+						throw;
+				}
+			}
 
 
 			foreach(var property in properties)
