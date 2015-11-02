@@ -79,11 +79,17 @@ namespace Automao.Data
 		#region IEnumberable<T>成员
 		public IEnumerator<T> GetEnumerator()
 		{
+			if(_enumerator != null)
+				_enumerator.Reset();
+
 			return this;
 		}
 
 		IEnumerator IEnumerable.GetEnumerator()
 		{
+			if(_enumerator != null)
+				_enumerator.Reset();
+
 			return this;
 		}
 		#endregion
