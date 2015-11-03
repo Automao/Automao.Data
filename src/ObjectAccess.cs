@@ -73,8 +73,12 @@ namespace Automao.Data
 			get
 			{
 				if(_mappingInfo == null)
-					System.Threading.Interlocked.CompareExchange(ref _mappingInfo,
-						MappingInfo.Create(Option.Mappings.Select(p => ((Options.Configuration.Mapping)p).Path).ToArray(), Option.MappingFileName), null);
+				{
+					var temp = new MappingInfo();
+					System.Threading.Interlocked.CompareExchange(ref _mappingInfo, temp, null);
+					if(_mappingInfo == temp)
+						_mappingInfo = MappingInfo.Create(Option.Mappings.Select(p => ((Options.Configuration.Mapping)p).Path).ToArray(), Option.MappingFileName);
+				}
 				return _mappingInfo;
 			}
 		}
