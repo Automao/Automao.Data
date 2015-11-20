@@ -42,7 +42,6 @@ namespace Automao.Data
 	{
 		#region 字段
 		private SqlExecuter _executer;
-		private bool _caseSensitive;
 		private DbProviderFactory _providerFactory;
 		private MappingInfo _mappingInfo;
 		private ConcurrentDictionary<Type, KeyValuePair<System.Reflection.ParameterInfo[], System.Reflection.PropertyInfo[]>> _typeDictionary;
@@ -52,10 +51,8 @@ namespace Automao.Data
 		/// <summary>
 		/// 
 		/// </summary>
-		/// <param name="caseSensitive">区分大小写</param>
-		public ObjectAccess(bool caseSensitive, DbProviderFactory providerFactory)
+		public ObjectAccess(DbProviderFactory providerFactory)
 		{
-			_caseSensitive = caseSensitive;
 			_providerFactory = providerFactory;
 			_typeDictionary = new ConcurrentDictionary<Type, KeyValuePair<System.Reflection.ParameterInfo[], System.Reflection.PropertyInfo[]>>();
 		}
@@ -109,7 +106,7 @@ namespace Automao.Data
 			if(classNode == null)
 				throw new Exception(string.Format("未找到{0}对应的mapping节点", name));
 
-			var classInfo = new ClassInfo("T", classNode);
+			var classInfo = CreateClassInfo("T", classNode);
 
 			var allColumnInfos = new Dictionary<string, ColumnInfo>();
 
@@ -132,7 +129,7 @@ namespace Automao.Data
 			}
 
 			allColumns = allColumns.Concat(members);
-			allColumnInfos = ColumnInfo.Create(allColumns, classInfo);
+			allColumnInfos = CreateColumnInfo(allColumns, classInfo);
 
 			return new ObjectAccessResult<T>(p =>
 			{
@@ -180,7 +177,7 @@ namespace Automao.Data
 
 			#region where
 			int ti = parameter.TableIndex, ji = parameter.JoinStartIndex, vi = parameter.ValueIndex;
-			var where = parameter.Condition.ToWhere(parameter.AllColumnInfos, _caseSensitive, ref ti, ref ji, ref vi, out values);
+			var where = parameter.Condition.ToWhere(parameter.AllColumnInfos, ref ti, ref ji, ref vi, out values);
 			parameter.TableIndex = ti;
 			parameter.JoinStartIndex = ji;
 			parameter.ValueIndex = vi;
@@ -203,7 +200,7 @@ namespace Automao.Data
 
 			Pretreatment(tempJoinInfos);
 
-			var join = string.Join(" ", tempJoinInfos.OrderBy(p => p.Target.AsIndex).Select(p => p.ToJoinSql(_caseSensitive)));
+			var join = string.Join(" ", tempJoinInfos.OrderBy(p => p.Target.AsIndex).Select(p => p.ToJoinSql(CreateColumnInfo)));
 			#endregion
 
 			#region grouping
@@ -215,7 +212,7 @@ namespace Automao.Data
 			if(parameter.Grouping != null)
 			{
 				var groupColumnInfos = parameter.Grouping.Members.Select(p => parameter.AllColumnInfos[p]).ToArray();
-				group = string.Format("GROUP BY {0}", string.Join(",", groupColumnInfos.Select(p => p.ToColumn(_caseSensitive))));
+				group = string.Format("GROUP BY {0}", string.Join(",", groupColumnInfos.Select(p => p.ToColumn())));
 
 				var groupedSelectMembers = parameter.Members.Where(p => !p.Contains('(') && !parameter.Grouping.Members.Contains(p));
 				groupedSelectColumns = groupedSelectMembers.Select(p => parameter.AllColumnInfos[p]).Where(predicate).ToList();
@@ -249,11 +246,11 @@ namespace Automao.Data
 					if(groupColumnInfo.Any())
 					{
 						var temp = groupColumnInfo.ToDictionary(gc => gc.Field, gc => gc);
-						var dic = p.JoinInfo.Member.ToDictionary(c => temp[c.Key.Name].GetColumnEx(_caseSensitive), c => c.Key.Column);
+						var dic = p.JoinInfo.Member.ToDictionary(c => temp[c.Key.Name].GetColumnEx(), c => c.Key.Column);
 
-						return Join.CreatJoinSql(_caseSensitive, p, dic);
+						return Join.CreatJoinSql(p, dic, CreateColumnInfo);
 					}
-					return p.ToJoinSql(_caseSensitive);
+					return p.ToJoinSql(CreateColumnInfo);
 				}));
 
 				if(parameter.Grouping.Condition != null)
@@ -262,13 +259,56 @@ namespace Automao.Data
 					ti = parameter.TableIndex;
 					ji = parameter.JoinStartIndex;
 					vi = parameter.ValueIndex;
-					having = parameter.Grouping.Condition.ToWhere(parameter.AllColumnInfos, _caseSensitive, ref ti, ref ji, ref vi, out tempValues, "HAVING {0}");
+					having = parameter.Grouping.Condition.ToWhere(parameter.AllColumnInfos, ref ti, ref ji, ref vi, out tempValues, "HAVING {0}");
 					values = values.Concat(tempValues).ToArray();
 				}
 			}
 			#endregion
 
-			var orderby = parameter.Sorting == null || parameter.Sorting.Length == 0 ? "" : string.Format("ORDER BY {0}", string.Join(",", parameter.Sorting.Select(p => p.Parse(parameter.AllColumnInfos, _caseSensitive))));
+			var orderby = parameter.Sorting == null || parameter.Sorting.Length == 0 ? "" : string.Format("ORDER BY {0}", string.Join(",", parameter.Sorting.Select(p => p.Parse(parameter.AllColumnInfos))));
+
+			if(parameter.Paging != null && parameter.Paging.TotalCount == 0)
+			{
+				var countSql = string.Empty;
+				if(string.IsNullOrEmpty(group))
+				{
+					var subparameter = new CreateSelectSqlParameter(false);
+					subparameter.Info = parameter.ClassInfo;
+					subparameter.Columns = new List<ColumnInfo>();
+					subparameter.Columns.Add(CreateColumnInfo("COUNT(0)"));
+					subparameter.Where = where;
+					subparameter.Join = join;
+
+					countSql = CreateSelectSql(subparameter);
+				}
+				else
+				{
+					var subparameter = new CreateGroupSelectSqlParameter(false);
+					subparameter.Info = parameter.ClassInfo;
+					subparameter.NewTableNameEx = newHostAsName;
+					subparameter.Columns = columns;
+					subparameter.Where = where;
+					subparameter.Join = join;
+					subparameter.Group = group;
+					subparameter.Having = having;
+					subparameter.GroupedSelectColumns = new List<ColumnInfo>();
+					subparameter.GroupedSelectColumns.Add(CreateColumnInfo("COUNT(0)"));
+					subparameter.GroupedJoin = groupedJoin;
+
+					countSql = CreateSelectSql(subparameter);
+				}
+
+				var tablevalues = this.Executer.Select(countSql, CreateParameters(0, values));
+
+				if(tablevalues != null)
+				{
+					var item = tablevalues.FirstOrDefault();
+					parameter.Paging.TotalCount = Zongsoft.Common.Convert.ConvertValue<int>(item.Values.First());
+
+					if(parameter.Paging.PageIndex > parameter.Paging.PageCount)
+						parameter.Paging.PageIndex = parameter.Paging.PageCount;
+				}
+			}
 
 			string sql;
 			if(string.IsNullOrEmpty(group))
@@ -303,52 +343,20 @@ namespace Automao.Data
 				sql = CreateSelectSql(subparameter);
 			}
 
-			if(parameter.Paging != null && parameter.Paging.TotalCount == 0)
-			{
-				var countSql = string.Empty;
-				if(string.IsNullOrEmpty(group))
-				{
-					var subparameter = new CreateSelectSqlParameter(false);
-					subparameter.Info = parameter.ClassInfo;
-					subparameter.Columns = new List<ColumnInfo>();
-					subparameter.Columns.Add(new ColumnInfo("COUNT(0)"));
-					subparameter.Where = where;
-					subparameter.Join = join;
-
-					countSql = CreateSelectSql(subparameter);
-				}
-				else
-				{
-					var subparameter = new CreateGroupSelectSqlParameter(false);
-					subparameter.Info = parameter.ClassInfo;
-					subparameter.NewTableNameEx = newHostAsName;
-					subparameter.Columns = columns;
-					subparameter.Where = where;
-					subparameter.Join = join;
-					subparameter.Group = group;
-					subparameter.Having = having;
-					subparameter.GroupedSelectColumns = new List<ColumnInfo>();
-					subparameter.GroupedSelectColumns.Add(new ColumnInfo("COUNT(0)"));
-					subparameter.GroupedJoin = groupedJoin;
-
-					countSql = CreateSelectSql(subparameter);
-				}
-
-				var tablevalues = this.Executer.Select(countSql, CreateParameters(0, values));
-
-				if(tablevalues != null)
-				{
-					var item = tablevalues.FirstOrDefault();
-					parameter.Paging.TotalCount = Zongsoft.Common.Convert.ConvertValue<int>(item.Values.First());
-				}
-			}
-
 			return new CreateSqlResult(sql, values);
 		}
 
 		protected abstract string CreateSelectSql(CreateSelectSqlParameter parameter);
 
 		protected abstract string CreateSelectSql(CreateGroupSelectSqlParameter parameter);
+
+		protected abstract ColumnInfo CreateColumnInfo(string original);
+
+		protected abstract Dictionary<string, ColumnInfo> CreateColumnInfo(IEnumerable<string> columns, ClassInfo root);
+
+		protected abstract ClassInfo CreateClassInfo(string @as, ClassNode classNode);
+
+		protected abstract string GetProcedureName(ProcedureNode procedureNode);
 		#endregion
 
 		#region Count
@@ -370,15 +378,15 @@ namespace Automao.Data
 			var conditionNames = GetConditionName(condition);
 			var allcolumns = conditionNames.Concat(includes);
 
-			var classInfo = new ClassInfo("T", info);
-			allColumnInfos = ColumnInfo.Create(allcolumns, classInfo);
+			var classInfo = CreateClassInfo("T", info);
+			allColumnInfos = CreateColumnInfo(allcolumns, classInfo);
 			classInfo.SetJoinIndex(0);
 
 			int tableIndex = 0;
 			int joinStartIndex = 0;
 			int valueIndex = 0;
 			object[] values;
-			var whereSql = condition.ToWhere(allColumnInfos, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
+			var whereSql = condition.ToWhere(allColumnInfos, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
 
 			var tempJoinInfos = new List<Join>();
 			foreach(var item in allColumnInfos.Keys)
@@ -390,17 +398,17 @@ namespace Automao.Data
 					tempJoinInfos.AddRange(columnInfo.Join.GetParent(p => tempJoinInfos.Contains(p)));
 				}
 			}
-			var joinsql = string.Join(" ", tempJoinInfos.OrderBy(p => p.Target.AsIndex).Select(p => p.ToJoinSql(_caseSensitive)));
+			var joinsql = string.Join(" ", tempJoinInfos.OrderBy(p => p.Target.AsIndex).Select(p => p.ToJoinSql(CreateColumnInfo)));
 
 			string countSql;
 			if(includes.Length == 0)
 				countSql = "COUNT(0)";
 			else if(includes.Length == 1)
-				countSql = string.Format("COUNT({0})", allColumnInfos[includes[0]].ToColumn(_caseSensitive));
+				countSql = string.Format("COUNT({0})", allColumnInfos[includes[0]].ToColumn());
 			else
-				countSql = string.Format("COUNT(CONCAT({0}))", string.Join(",", includes.Select(p => allColumnInfos[p]).Select(p => p.ToColumn(_caseSensitive))));
+				countSql = string.Format("COUNT(CONCAT({0}))", string.Join(",", includes.Select(p => allColumnInfos[p]).Select(p => p.ToColumn())));
 
-			var sql = string.Format("SELECT {0} FROM {1} {2} {3}", countSql, classInfo.GetTableName(_caseSensitive), joinsql, whereSql);
+			var sql = string.Format("SELECT {0} FROM {1} {2} {3}", countSql, classInfo.GetTableName(), joinsql, whereSql);
 
 			var result = Executer.ExecuteScalar(sql, CreateParameters(0, values));
 			return int.Parse(result.ToString());
@@ -421,17 +429,17 @@ namespace Automao.Data
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
 			var conditionNames = GetConditionName(condition);
-			var classInfo = new ClassInfo("", info);
-			var columnInfos = ColumnInfo.Create(conditionNames, classInfo);
+			var classInfo = CreateClassInfo("", info);
+			var columnInfos = CreateColumnInfo(conditionNames, classInfo);
 			classInfo.SetJoinIndex(0);
 
 			var values = new object[0];
 			int tableIndex = 0;
 			int joinStartIndex = 0;
 			int valueIndex = 0;
-			var whereSql = condition.ToWhere(columnInfos, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
+			var whereSql = condition.ToWhere(columnInfos, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
 
-			var sql = string.Format("DELETE FROM {0} {1}", info.GetTableName(_caseSensitive), whereSql);
+			var sql = string.Format("DELETE FROM {0} {1}", CreateClassInfo("", info).GetTableName(), whereSql);
 			return Executer.Execute(sql, CreateParameters(0, values));
 		}
 		#endregion
@@ -474,7 +482,7 @@ namespace Automao.Data
 
 			paramers.AddRange(procedureInfo.ParameterList.Where(p => !inParameters.ContainsKey(p.Name)).Select((p, i) => CreateParameter(paramers.Count + i, null, p.DbType, p.Name, p.IsOutPut, false, p.Size, true)).ToArray());
 
-			var procedureName = procedureInfo.GetProcedureName(_caseSensitive);
+			var procedureName = GetProcedureName(procedureInfo);
 			var tablevalues = Executer.ExecuteProcedure(procedureName, paramers.ToArray(), out dic);
 
 			outParameters = dic.ToDictionary(p => p.Key, p => p.Value);
@@ -506,15 +514,15 @@ namespace Automao.Data
 			var sqls = new List<KeyValuePair<string, DbParameter[]>>();
 
 			var insertformat = "INSERT INTO {0}({1}) VALUES({2})";
-			var columnformat = _caseSensitive ? "\"{0}\"" : "{0}";
-			var tableName = info.GetTableName(_caseSensitive);
+			var columnformat = "{0}";
+			var tableName = CreateClassInfo("", info).GetTableName();
 			foreach(var item in entities)
 			{
 				Dictionary<PropertyNode, object> pks;
 				var dic = GetColumnFromEntity(info, item, null, out pks).Where(p => p.Value != null && includes.Contains(p.Key.Name, StringComparer.OrdinalIgnoreCase)).ToDictionary(p => p.Key, p => p.Value);
 
 				var sql = string.Format(insertformat, tableName,
-					string.Join(",", dic.Keys.Select(p => string.Format(columnformat, p.Column))),
+					string.Join(",", dic.Keys.Select(p => string.Format(columnformat, CreateColumnInfo(p.Column).ToColumn()))),
 					string.Join(",", dic.Select((p, i) => string.Format("{{{0}}}", i)))
 				);
 
@@ -551,13 +559,13 @@ namespace Automao.Data
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
 			var sqls = new List<KeyValuePair<string, DbParameter[]>>();
-			var classInfo = new ClassInfo("T", info);
+			var classInfo = CreateClassInfo("T", info);
 
-			var setFormat = _caseSensitive ? "\"{0}\"={{{1}}}" : "{0}={{{1}}}";
-			var addToSetFormat = _caseSensitive ? "\"{0}\"=\"{1}\" {2} {{{3}}}" : "{0}={1} {2} {{{3}}}";
-			var setNullFormat = _caseSensitive ? "\"{0}\"=NULL" : "{0}=NULL";
+			var setFormat = "{0}={{{1}}}";
+			var addToSetFormat = "{0}={1} {2} {{{3}}}";
+			var setNullFormat = "{0}=NULL";
 			var updateformat = "UPDATE {0} SET {1} {2}";
-			var tableName = classInfo.GetTableName(_caseSensitive);
+			var tableName = classInfo.GetTableName();
 
 			var whereValues = new object[0];
 			int tableIndex = 0;
@@ -567,9 +575,9 @@ namespace Automao.Data
 			if(condition != null)
 			{
 				var columns = GetConditionName(condition);
-				var columnInofs = ColumnInfo.Create(columns, classInfo);
+				var columnInofs = CreateColumnInfo(columns, classInfo);
 				classInfo.SetJoinIndex(0);
-				wheresql = condition.ToWhere(columnInofs, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out whereValues);
+				wheresql = condition.ToWhere(columnInofs, ref tableIndex, ref joinStartIndex, ref valueIndex, out whereValues);
 			}
 
 			foreach(var entity in entities)
@@ -585,14 +593,14 @@ namespace Automao.Data
 					var newCondition = new ConditionCollection(ConditionCombine.And, pks.Select(p => new Condition(p.Key.Name, p.Value)));
 
 					classInfo.Joins.Clear();
-					var columnInfos = ColumnInfo.Create(pks.Select(p => p.Key.Name), classInfo);
+					var columnInfos = CreateColumnInfo(pks.Select(p => p.Key.Name), classInfo);
 					classInfo.SetJoinIndex(0);
 
-					wheresql = newCondition.ToWhere(columnInfos, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out whereValues);
+					wheresql = newCondition.ToWhere(columnInfos, ref tableIndex, ref joinStartIndex, ref valueIndex, out whereValues);
 				}
 
 				var temp = dic.Where(p => p.Value != null && !(p.Value is System.Linq.Expressions.Expression));
-				var list = temp.Select((p, i) => string.Format(setFormat, p.Key.Column, i + valueIndex)).ToList();
+				var list = temp.Select((p, i) => string.Format(setFormat, CreateColumnInfo(p.Key.Column).ToColumn(), i + valueIndex)).ToList();
 				var paramers = CreateParameters(0, whereValues).Concat(temp.Select((p, i) => CreateParameter(i + valueIndex, p.Value))).ToList();
 				valueIndex += list.Count;
 
@@ -609,12 +617,12 @@ namespace Automao.Data
 				{
 					var leftName = ((MemberExpression)p.Value.Left).Member.Name;
 					var tempPropertyNode = info.PropertyNodeList.FirstOrDefault(pp => pp.Name.Equals(leftName, StringComparison.OrdinalIgnoreCase)) ?? new PropertyNode(leftName);
-					return string.Format(addToSetFormat, p.Key.Column, tempPropertyNode.Column, p.Value.NodeType.ToSQL(), i + valueIndex);
+					return string.Format(addToSetFormat, CreateColumnInfo(p.Key.Column).ToColumn(), CreateColumnInfo(tempPropertyNode.Column).ToColumn(), p.Value.NodeType.ToSQL(), i + valueIndex);
 				}));
 
 				paramers.AddRange(expressionValues.Select((p, i) => CreateParameter(i + valueIndex, ((ConstantExpression)p.Value.Right).Value)));
 
-				list.AddRange(dic.Where(p => p.Value == null).Select(p => string.Format(setNullFormat, p.Key.Column)));
+				list.AddRange(dic.Where(p => p.Value == null).Select(p => string.Format(setNullFormat, CreateColumnInfo(p.Key.Column).ToColumn())));
 
 				var sql = string.Format(updateformat, tableName, string.Join(",", list), wheresql);
 
@@ -650,15 +658,15 @@ namespace Automao.Data
 
 			var allcolumns = GetConditionName(condition);
 
-			var classInfo = new ClassInfo("T", info);
-			allColumnInfos = ColumnInfo.Create(allcolumns, classInfo);
+			var classInfo = CreateClassInfo("T", info);
+			allColumnInfos = CreateColumnInfo(allcolumns, classInfo);
 			classInfo.SetJoinIndex(0);
 
 			int tableIndex = 0;
 			int joinStartIndex = 0;
 			int valueIndex = 0;
 			object[] values;
-			var whereSql = condition.ToWhere(allColumnInfos, _caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
+			var whereSql = condition.ToWhere(allColumnInfos, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
 
 			var tempJoinInfos = new List<Join>();
 			foreach(var item in allColumnInfos.Keys)
@@ -670,9 +678,9 @@ namespace Automao.Data
 					tempJoinInfos.AddRange(columnInfo.Join.GetParent(p => tempJoinInfos.Contains(p)));
 				}
 			}
-			var joinsql = string.Join(" ", tempJoinInfos.OrderBy(p => p.Target.AsIndex).Select(p => p.ToJoinSql(_caseSensitive)));
+			var joinsql = string.Join(" ", tempJoinInfos.OrderBy(p => p.Target.AsIndex).Select(p => p.ToJoinSql(CreateColumnInfo)));
 
-			var sql = string.Format("SELECT 0 FROM {0} {1} {2} LIMIT 0,1", classInfo.GetTableName(_caseSensitive), joinsql, whereSql);
+			var sql = string.Format("SELECT 0 FROM {0} {1} {2} LIMIT 0,1", classInfo.GetTableName(), joinsql, whereSql);
 
 			var result = Executer.ExecuteScalar(sql, CreateParameters(0, values));
 			return result != null;
@@ -923,20 +931,20 @@ namespace Automao.Data
 		/// <param name="joinList"></param>
 		private void Pretreatment(List<Join> joinList)
 		{
-			var whereformat = _caseSensitive ? "WHERE {0}.{1}={2}.\"{3}\"" : "WHERE {0}.{1}={2}.{3}";
+			var whereformat = "WHERE {0}={1}";
 			var paging = new Paging(1, 1);
 			foreach(var item in joinList)
 			{
 				if(item.JoinInfo.Type == JoinType.Inner && ParentHasLeftJoin(item))
 				{
-					var tempClassInfo = new ClassInfo("TT", item.Target.ClassNode);
+					var tempClassInfo = CreateClassInfo("TT", item.Target.ClassNode);
 					item.Parent.AddJoinWhere(string.Join(" AND ", item.JoinInfo.Member.Select(p =>
 					{
-						var where = string.Format(whereformat, tempClassInfo.AsName, p.Value.Column, item.Host.AsName, p.Key.Column);
+						var where = string.Format(whereformat, CreateColumnInfo(p.Value.Column).ToColumn(tempClassInfo.AsName), CreateColumnInfo(p.Key.Column).ToColumn(item.Host.AsName));
 						var subparameter = new CreateSelectSqlParameter(true);
 						subparameter.Info = tempClassInfo;
 						subparameter.Columns = new List<ColumnInfo>();
-						subparameter.Columns.Add(new ColumnInfo("0"));
+						subparameter.Columns.Add(CreateColumnInfo("0"));
 						subparameter.Where = where;
 						subparameter.Paging = paging;
 

@@ -54,9 +54,11 @@
     <Compile Include="ColumnInfo.cs" />
     <Compile Include="Mapping\JoinPropertyNode.cs" />
     <Compile Include="JoinType.cs" />
+    <Compile Include="MySql\MySqlClassInfo.cs" />
+    <Compile Include="MySql\MySqlColumnInfo.cs" />
     <Compile Include="ObjectAccessResult.cs" />
     <Compile Include="JoinInfo.cs" />
-    <Compile Include="MySqlDataAccess.cs" />
+    <Compile Include="MySql\MySqlDataAccess.cs" />
     <Compile Include="Mapping\ProcedureNode.cs" />
     <Compile Include="Mapping\ProcedureParameterNode.cs" />
     <Compile Include="ObjectExtension.cs" />

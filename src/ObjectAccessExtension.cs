@@ -36,15 +36,15 @@ namespace Automao.Data
 {
 	public static class ObjectAccessExtension
 	{
-		internal static string ToWhere(this ICondition condition, Dictionary<string, ColumnInfo> columnInfos, bool caseSensitive, ref int tableIndex, ref int joinStartIndex, ref int valueIndex, out object[] values, string format = "WHERE {0}")
+		internal static string ToWhere(this ICondition condition, Dictionary<string, ColumnInfo> columnInfos, ref int tableIndex, ref int joinStartIndex, ref int valueIndex, out object[] values, string format = "WHERE {0}")
 		{
-			var where = Resolve(condition, columnInfos, caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
+			var where = Resolve(condition, columnInfos, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
 			if(string.IsNullOrEmpty(where))
 				return "";
 			return string.Format(format, where);
 		}
 
-		private static string Resolve(ICondition condition, Dictionary<string, ColumnInfo> columnInfos, bool caseSensitive, ref int tableIndex, ref int joinStartIndex, ref int valueIndex, out object[] values)
+		private static string Resolve(ICondition condition, Dictionary<string, ColumnInfo> columnInfos, ref int tableIndex, ref int joinStartIndex, ref int valueIndex, out object[] values)
 		{
 			if(condition is Condition)
 			{
@@ -59,9 +59,9 @@ namespace Automao.Data
 				var oper = where.Operator.Parse(ref values, ref tableIndex, ref joinStartIndex, ref valueIndex);
 
 				if(string.IsNullOrEmpty(oper))
-					return string.Format("{0} != {0}", columnInfo.ToColumn(caseSensitive));
+					return string.Format("{0} != {0}", columnInfo.ToColumn());
 				else
-					return string.Format("{0} {1}", columnInfo.ToColumn(caseSensitive), oper);
+					return string.Format("{0} {1}", columnInfo.ToColumn(), oper);
 			}
 			else if(condition is ConditionCollection)
 			{
@@ -71,7 +71,7 @@ namespace Automao.Data
 
 				foreach(var item in where)
 				{
-					var result = Resolve(item, columnInfos, caseSensitive, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
+					var result = Resolve(item, columnInfos, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
 					if(string.IsNullOrEmpty(result))
 						continue;
 
@@ -201,10 +201,10 @@ namespace Automao.Data
 			}));
 		}
 
-		internal static string Parse(this Sorting sorting, Dictionary<string, ColumnInfo> columnInfos, bool caseSensitive)
+		internal static string Parse(this Sorting sorting, Dictionary<string, ColumnInfo> columnInfos)
 		{
 			var sort = sorting.Mode.Parse();
-			var format = caseSensitive ? "{0}.\"{1}\" {2}" : "{0}.{1} {2}";
+			var format = "{0} {1}";
 
 			return string.Join(",", sorting.Members.Select(p =>
 			{
@@ -213,9 +213,8 @@ namespace Automao.Data
 					throw new Exception(string.Format("未找到属性\"{0}\"的描述信息", p));
 
 				var columnInfo = columnInfos[p];
-				var pi = columnInfo.PropertyNode;
 
-				return string.Format(format, columnInfo.ClassInfo.AsName, pi == null ? columnInfo.Field : pi.Column, sort);
+				return string.Format(format, columnInfo.ToColumn(), sort);
 			}));
 		}
 

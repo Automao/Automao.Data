@@ -1,11 +1,12 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Automao.Data.Mapping;
 
 namespace Automao.Data
 {
-	public class ColumnInfo
+	public abstract class ColumnInfo
 	{
 		#region 字段
 		private string _original;
@@ -19,7 +20,7 @@ namespace Automao.Data
 		#endregion
 
 		#region 构造函数
-		public ColumnInfo(string original)
+		protected ColumnInfo(string original)
 		{
 			_original = original;
 			_field = original;
@@ -74,63 +75,50 @@ namespace Automao.Data
 		#endregion
 
 		#region 方法
-		public string ToColumn(bool caseSensitive, string asName = null)
+		public string ToColumn(string asName = null)
 		{
 			if(string.IsNullOrEmpty(asName) && _classInfo != null)
 				asName = _classInfo.AsName;
 			if(!string.IsNullOrEmpty(asName))
 				asName += ".";
 
-			var columnformat = caseSensitive ? "{0}\"{1}\"" : "{0}{1}";
 			var field = PropertyNode != null ? _propertyNode.Column : _field;
 
 			if(field == "0" || field.Equals("count(0)", System.StringComparison.OrdinalIgnoreCase))
 				return field.ToUpper();
 			if(!string.IsNullOrEmpty(_aggregateFunctionName))
-				return string.Format(caseSensitive ? "{0}({1}\"{2}\")" : "{0}({1}{2})", _aggregateFunctionName.ToUpper(), asName, field);
+				return ToColumn(_aggregateFunctionName.ToUpper(), asName, field);
 
-			return string.Format(columnformat, asName, field);
+			return ToColumn(asName, field);
 		}
 
-		public string ToSelectColumn(bool caseSensitive, string asName = null, string columnAsName = null)
+		public string ToSelectColumn(string asName = null, string columnAsName = null)
 		{
 			if(!string.IsNullOrEmpty(_selectColumn))
 				return _selectColumn;
 
-			if(string.IsNullOrEmpty(asName) && _classInfo != null)
-				asName = _classInfo.AsName;
-			if(!string.IsNullOrEmpty(asName))
-				asName += ".";
+			_selectColumn = ToColumn(asName);
 
-			var columnformat = caseSensitive ? "{0}\"{1}\"" : "{0}{1}";
-			var field = PropertyNode != null ? _propertyNode.Column : _field;
-			if(field == "0" || field.Equals("count(0)", System.StringComparison.OrdinalIgnoreCase))
-				_selectColumn = field.ToUpper();
-			else if(!string.IsNullOrEmpty(_aggregateFunctionName))
-				_selectColumn = string.Format(caseSensitive ? "{0}({1}\"{2}\")" : "{0}({1}{2})", _aggregateFunctionName.ToUpper(), asName, field);
-			else
-				_selectColumn = string.Format(columnformat, asName, field);
+			_selectColumn += " " + GetColumnEx(columnAsName);
 
-			_selectColumn += " " + GetColumnEx(caseSensitive, columnAsName);
 			return _selectColumn;
 		}
 
-		public string GetColumnEx(bool caseSensitive, string asName = null)
+		public string GetColumnEx(string asName = null)
 		{
 			if(string.IsNullOrEmpty(asName) && (_classInfo != null || !string.IsNullOrEmpty(_subAsName)))
 				asName = string.IsNullOrEmpty(_subAsName) ? _classInfo.AsName : _subAsName;
 
-			var columnformat = caseSensitive ? "\"{0}_{1}\"" : "{0}_{1}";
 			var field = PropertyNode != null ? _propertyNode.Column : _field;
 
 			if(field == "0")
 				return string.Format("{0}_0", asName);
 			if(field.Equals("count(0)", System.StringComparison.OrdinalIgnoreCase))
-				return string.Format(caseSensitive ? "\"{0}_Count\"" : "{0}_Count", asName);
+				return string.Format("{0}_COUNT", asName);
 			if(!string.IsNullOrEmpty(_aggregateFunctionName))
-				return string.Format(caseSensitive ? "\"{1}_{0}_{2}\"" : "{1}_{0}_{2}", _aggregateFunctionName.ToUpper(), asName, field);
+				return GetColumnEx(_aggregateFunctionName.ToUpper(), asName, field);
 
-			return string.Format(columnformat, asName, field);
+			return GetColumnEx(asName, field);
 		}
 		#endregion
 
@@ -153,7 +141,7 @@ namespace Automao.Data
 		/// <param name="columns"></param>
 		/// <param name="root"></param>
 		/// <returns></returns>
-		public static Dictionary<string, ColumnInfo> Create(IEnumerable<string> columns, ClassInfo root)
+		protected static Dictionary<string, ColumnInfo> Create(IEnumerable<string> columns, ClassInfo root, Func<string, ColumnInfo> createColumnInfo, Func<string, ClassNode, ClassInfo> createClassInfo)
 		{
 			var result = new Dictionary<string, ColumnInfo>();
 			var joinDic = new Dictionary<string, Join>();
@@ -162,7 +150,7 @@ namespace Automao.Data
 			{
 				if(result.ContainsKey(item))
 					continue;
-				var columnInfo = new ColumnInfo(item);
+				var columnInfo = createColumnInfo(item);
 
 				var temp = item;
 				if(temp.Equals("count(0)", System.StringComparison.OrdinalIgnoreCase))
@@ -196,7 +184,7 @@ namespace Automao.Data
 						if(IsParentProperty(host.ClassNode, 0, property, out parents))//搞定继承的问题
 						{
 							parents.Reverse();
-							var last = AddJoin(joinDic, parent, host, parents[0].Name, parents);
+							var last = AddJoin(joinDic, parent, host, parents[0].Name, parents, createClassInfo);
 							columnInfo._join = last;
 							columnInfo._subAsName = host.AsName;
 							columnInfo._classInfo = last.Target;
@@ -214,7 +202,7 @@ namespace Automao.Data
 					{
 						var join = new Join(parent, host);
 						join.JoinInfo = joinInfo;
-						join.Target = new ClassInfo("J", joinInfo.Target);
+						join.Target = createClassInfo("J", joinInfo.Target);
 
 						host = join.Target;
 						parent = join;
@@ -263,7 +251,7 @@ namespace Automao.Data
 			return false;
 		}
 
-		public static Join AddJoin(Dictionary<string, Join> list, Join parent, ClassInfo host, string key, IEnumerable<JoinPropertyNode> values)
+		public static Join AddJoin(Dictionary<string, Join> list, Join parent, ClassInfo host, string key, IEnumerable<JoinPropertyNode> values, Func<string, ClassNode, ClassInfo> createClassInfo)
 		{
 			Join join = null;
 			foreach(var value in values)
@@ -274,7 +262,7 @@ namespace Automao.Data
 				{
 					join = new Join(parent, host);
 					join.JoinInfo = value;
-					join.Target = new ClassInfo("J", join.JoinInfo.Target);
+					join.Target = createClassInfo("J", join.JoinInfo.Target);
 					list.Add(key, join);
 				}
 
@@ -285,6 +273,13 @@ namespace Automao.Data
 
 			return join;
 		}
+		#endregion
+
+		#region 抽象方法
+		protected abstract string ToColumn(string asName, string field);
+		protected abstract string ToColumn(string aggregateFunctionName, string asName, string field);
+		protected abstract string GetColumnEx(string asName, string field);
+		protected abstract string GetColumnEx(string aggregateFunctionName, string asName, string field);
 		#endregion
 	}
 }

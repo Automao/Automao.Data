@@ -90,25 +90,25 @@ namespace Automao.Data
 			return result;
 		}
 
-		public string ToJoinSql(bool caseSensitive)
+		public string ToJoinSql(Func<string, ColumnInfo> createColumnInfo)
 		{
-			return CreatJoinSql(caseSensitive, this);
+			return CreatJoinSql(this, createColumnInfo);
 		}
 
-		public static string CreatJoinSql(bool caseSensitive, Join join)
+		public static string CreatJoinSql(Join join, Func<string, ColumnInfo> createColumnInfo)
 		{
-			return CreatJoinSql(caseSensitive, join, join.JoinInfo.Member.ToDictionary(jc => jc.Key.Column, jc => jc.Value.Column));
+			return CreatJoinSql(join, join.JoinInfo.Member.ToDictionary(jc => jc.Key.Column, jc => jc.Value.Column), createColumnInfo);
 		}
 
-		public static string CreatJoinSql(bool caseSensitive, Join join, Dictionary<string, string> relation)
+		public static string CreatJoinSql(Join join, Dictionary<string, string> relation, Func<string, ColumnInfo> createColumnInfo)
 		{
 			var isLeftJoin = join._changeMode.HasValue ? join._changeMode.Value == JoinType.Left : join.JoinInfo.Type == JoinType.Left;
 			var hostAsName = string.IsNullOrEmpty(join._changeHostAsname) ? join.Host.AsName : join._changeHostAsname;
 
 			var joinformat = "{0} JOIN {1} ON {2}";
-			var onformat = caseSensitive ? "{0}.\"{1}\"={2}.\"{3}\"" : "{0}.{1}={2}.{3}";
-			return string.Format(joinformat, isLeftJoin ? "LeFT" : "INNER", join.Target.GetTableName(caseSensitive),
-				string.Join(" AND ", relation.Select(jc => string.Format(onformat, hostAsName, jc.Key, join.Target.AsName, jc.Value)).Concat(join._newWhere)));
+			return string.Format(joinformat, isLeftJoin ? "LeFT" : "INNER", join.Target.GetTableName(),
+				string.Join(" AND ", relation.Select(jc => createColumnInfo(jc.Key).ToColumn(hostAsName) + "=" + createColumnInfo(jc.Value).ToColumn(join.Target.AsName))
+				.Concat(join._newWhere)));
 		}
 	}
 }

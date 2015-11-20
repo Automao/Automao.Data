@@ -29,10 +29,10 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
-
+using MySql.Data.MySqlClient;
 using Zongsoft.Data;
 
-namespace Automao.Data
+namespace Automao.Data.MySql
 {
 	public class MySqlDataAccess : ObjectAccess
 	{
@@ -42,7 +42,7 @@ namespace Automao.Data
 
 		#region 构造函数
 		public MySqlDataAccess()
-			: base(false, MySql.Data.MySqlClient.MySqlClientFactory.Instance)
+			: base(MySqlClientFactory.Instance)
 		{
 		}
 		#endregion
@@ -62,7 +62,7 @@ namespace Automao.Data
 		#region 重写方法
 		protected override string CreateSelectSql(CreateSelectSqlParameter parameter)
 		{
-			var sql = string.Format("SELECT {0} FROM {1}", string.Join(",", parameter.Columns.Select(p => p.ToSelectColumn(false))), parameter.Info.GetTableName(false));
+			var sql = string.Format("SELECT {0} FROM {1}", string.Join(",", parameter.Columns.Select(p => p.ToSelectColumn())), parameter.Info.GetTableName());
 			if(!string.IsNullOrEmpty(parameter.Join))
 				sql += " " + parameter.Join;
 			if(!string.IsNullOrEmpty(parameter.Where))
@@ -82,7 +82,7 @@ namespace Automao.Data
 				{
 					sql = string.Format("select {0} from ({1}) {2}", string.Join(",", parameter.Columns.Select(p =>
 					{
-						var c = p.GetColumnEx(false);
+						var c = p.GetColumnEx();
 						if(c == "0")
 							return c;
 						return string.Format("{0}.{1}", parameter.Info.AsName, c);
@@ -95,7 +95,7 @@ namespace Automao.Data
 
 		protected override string CreateSelectSql(CreateGroupSelectSqlParameter parameter)
 		{
-			var sql = string.Format("SELECT {0} FROM {1}", string.Join(",", parameter.Columns.Select(p => p.ToSelectColumn(false))), parameter.Info.GetTableName(false));
+			var sql = string.Format("SELECT {0} FROM {1}", string.Join(",", parameter.Columns.Select(p => p.ToSelectColumn())), parameter.Info.GetTableName());
 			if(!string.IsNullOrEmpty(parameter.Join))
 				sql += " " + parameter.Join;
 			if(!string.IsNullOrEmpty(parameter.Where))
@@ -113,9 +113,9 @@ namespace Automao.Data
 				newColumns = string.Join(",", parameter.GroupedSelectColumns.Select(p =>
 				{
 					if(p.ClassInfo == parameter.Info)
-						return p.ToSelectColumn(false, parameter.NewTableNameEx, parameter.NewTableNameEx);
+						return p.ToSelectColumn(parameter.NewTableNameEx, parameter.NewTableNameEx);
 					else
-						return p.ToSelectColumn(false);
+						return p.ToSelectColumn();
 				}));
 				sql = string.Format("select {0} {1} from ({2}) {3}", newColumns.Equals("count(0)", StringComparison.OrdinalIgnoreCase) ? "" : string.Format("{0}.*,", parameter.NewTableNameEx), newColumns, sql, parameter.NewTableNameEx);
 				if(!string.IsNullOrEmpty(parameter.GroupedJoin))
@@ -139,7 +139,7 @@ namespace Automao.Data
 				if(parameter.Subquery && (parameter.ConditionOperator == ConditionOperator.In || parameter.ConditionOperator == ConditionOperator.NotIn))
 				{
 					sql = string.Format("select {0} from ({1}) {2}", string.Join(",", parameter.GroupedSelectColumns.Select(p =>
-						p.ToSelectColumn(false, parameter.NewTableNameEx, parameter.NewTableNameEx)
+						p.ToSelectColumn(parameter.NewTableNameEx, parameter.NewTableNameEx)
 						)), sql, parameter.NewTableNameEx);
 				}
 			}
@@ -149,7 +149,7 @@ namespace Automao.Data
 
 		internal override DbParameter CreateParameter(int index, object value, string dbType = null, string name = null, bool isOutPut = false, bool isInOutPut = false, int? size = null, bool isProcedure = false)
 		{
-			var paramer = new MySql.Data.MySqlClient.MySqlParameter();
+			var paramer = new MySqlParameter();
 
 			paramer.ParameterName = string.IsNullOrEmpty(name) ? ("p" + index) : name;
 			if(!isProcedure)
@@ -180,5 +180,25 @@ namespace Automao.Data
 			return paramer;
 		}
 		#endregion
+
+		protected override Dictionary<string, ColumnInfo> CreateColumnInfo(IEnumerable<string> columns, ClassInfo root)
+		{
+			return MySql.MySqlColumnInfo.Create(columns, root);
+		}
+
+		protected override ColumnInfo CreateColumnInfo(string original)
+		{
+			return new MySqlColumnInfo(original);
+		}
+
+		protected override ClassInfo CreateClassInfo(string @as, Mapping.ClassNode classNode)
+		{
+			return new MySqlClassInfo(@as, classNode);
+		}
+
+		protected override string GetProcedureName(Mapping.ProcedureNode procedureNode)
+		{
+			return procedureNode.GetProcedureName(false);
+		}
 	}
 }

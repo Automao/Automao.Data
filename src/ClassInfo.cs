@@ -7,25 +7,25 @@ using Automao.Data.Mapping;
 
 namespace Automao.Data
 {
-	public class ClassInfo
+	public abstract class ClassInfo
 	{
 		#region 字段
 		private string _asName;
 		private string _as;
 		private int _asIndex;
 		private Mapping.ClassNode _classNode;
-		private List<Join> _joins; 
+		private List<Join> _joins;
 		#endregion
 
 		#region 构造函数
-		public ClassInfo(string @as, ClassNode classNode)
+		protected ClassInfo(string @as, ClassNode classNode)
 		{
 			_as = @as;
 			_classNode = classNode;
 			_joins = new List<Join>();
 
 			_asName = @as;
-		} 
+		}
 		#endregion
 
 		#region 属性
@@ -67,7 +67,7 @@ namespace Automao.Data
 			{
 				return _asIndex;
 			}
-		} 
+		}
 		#endregion
 
 		#region 方法
@@ -89,10 +89,14 @@ namespace Automao.Data
 			return start;
 		}
 
-		public string GetTableName(bool caseSensitive)
+		public string GetTableName()
 		{
-			return string.Format("{0} {1}", _classNode.GetTableName(caseSensitive), _asName);
+			return GetTableName(_classNode, _asName);
 		}
+		#endregion
+
+		#region 受保护的虚方法
+		protected abstract string GetTableName(ClassNode classNode, string asName);
 		#endregion
 	}
 }
