@@ -13,7 +13,7 @@
 	</manifest>
 
 	<extension path="/Workspace/Services/Data">
-		<object name="Automao" type="Automao.Data.MySqlDataAccess,Automao.Data" Option="{opt:/Data/Automao}" />
+		<object name="Automao" type="Automao.Data.MySql.MySqlDataAccess,Automao.Data" Option="{opt:/Data/Automao}" />
 		<object name="Security" value="{path:../Automao}" />
 	</extension>
 
