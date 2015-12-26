@@ -117,7 +117,7 @@ namespace Automao.Data.MySql
 					else
 						return p.ToSelectColumn();
 				}));
-				sql = string.Format("select {0} {1} from ({2}) {3}", newColumns.Equals("count(0)", StringComparison.OrdinalIgnoreCase) ? "" : string.Format("{0}.*,", parameter.NewTableNameEx), newColumns, sql, parameter.NewTableNameEx);
+				sql = string.Format("select {0} from ({1}) {2}", string.Format("{0},{1}.*", newColumns, parameter.NewTableNameEx), sql, parameter.NewTableNameEx);
 				if(!string.IsNullOrEmpty(parameter.GroupedJoin))
 					sql += " " + parameter.GroupedJoin;
 			}
@@ -125,9 +125,9 @@ namespace Automao.Data.MySql
 			if(!string.IsNullOrEmpty(parameter.Orderby))
 			{
 				if(parameter.GroupedSelectColumns == null || parameter.GroupedSelectColumns.Count == 0)
-					sql += " " + parameter.Orderby.Replace(parameter.Info.AsName + ".", parameter.NewTableNameEx + ".").Replace(parameter.Info.AsName + "_", parameter.NewTableNameEx + "_");
-				else
 					sql += " " + parameter.Orderby;
+				else
+					sql += " " + parameter.Orderby.Replace(parameter.Info.AsName + ".", parameter.NewTableNameEx + ".").Replace(parameter.Info.AsName + "_", parameter.NewTableNameEx + "_");
 			}
 
 			if(parameter.Paging != null)

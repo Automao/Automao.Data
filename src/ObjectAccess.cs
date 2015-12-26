@@ -118,6 +118,8 @@ namespace Automao.Data
 				allColumns = allColumns.Concat(grouping.Members);
 				if(grouping.Condition != null)
 					allColumns = allColumns.Concat(GetConditionName(grouping.Condition));
+				if(!members.Any(p => p.StartsWith("count(", StringComparison.OrdinalIgnoreCase)))
+					members = members.Concat(new[] { "COUNT(0)" }).ToArray();
 			}
 
 			if(sorting != null)
@@ -694,10 +696,17 @@ namespace Automao.Data
 		#endregion
 
 		#region 方法
+		/// <summary>
+		/// 
+		/// </summary>
+		/// <typeparam name="T">返回结果的类型,classInfo.ClassNode.EntityType这个类型只用来生成查询列</typeparam>
+		/// <param name="table"></param>
+		/// <param name="classInfo"></param>
+		/// <returns></returns>
 		internal IEnumerable<T> SetEntityValue<T>(IEnumerable<Dictionary<string, object>> table, ClassInfo classInfo)
 		{
 			var entityType = typeof(T);
-			if(!entityType.IsDictionary())
+			if(entityType == typeof(object))
 				entityType = classInfo.ClassNode.EntityType;
 
 			foreach(var row in table)
@@ -738,8 +747,9 @@ namespace Automao.Data
 						continue;
 					}
 
+					var property = type.GetProperty(item.JoinInfo.Name);
 					//flag=true也要创建一个空实体，因为可能要创建这个空实体的导航属性
-					var propertyValue = CreateEntity(item.Target.ClassNode.EntityType, dic, item.Target.ClassNode);
+					var propertyValue = CreateEntity(property.PropertyType, dic, item.Target.ClassNode);
 
 					if(propertyValue == null)
 						return false;
@@ -749,7 +759,6 @@ namespace Automao.Data
 					if(!SetNavigationProperty(item.Target, propertyValue, values) && flag)
 						continue;
 
-					var property = type.GetProperty(item.JoinInfo.Name);
 					property.SetValue(entity, propertyValue);
 					success = true;
 				}

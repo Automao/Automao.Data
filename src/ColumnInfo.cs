@@ -153,12 +153,7 @@ namespace Automao.Data
 				var columnInfo = createColumnInfo(item);
 
 				var temp = item;
-				if(temp.Equals("count(0)", System.StringComparison.OrdinalIgnoreCase))
-				{
-					result.Add(item, columnInfo);
-					continue;
-				}
-				else
+				if(!item.Equals("count(0)", StringComparison.OrdinalIgnoreCase))
 				{
 					var match = Regex.Match(item, @"(?'name'.+)\((?'property'.+)\)");
 					if(match.Success)
