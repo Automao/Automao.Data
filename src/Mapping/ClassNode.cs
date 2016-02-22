@@ -244,7 +244,7 @@ namespace Automao.Data.Mapping
 			if(MappingInfo.GetAttribuleValue(element, "schema", out attribuleValue))
 				info._schema = attribuleValue;
 
-			if(MappingInfo.GetAttribuleValue(element, "Inherit", out attribuleValue))
+			if(MappingInfo.GetAttribuleValue(element, "inherits", out attribuleValue))
 				info._inherit = attribuleValue;
 
 			info._propertyNodeList = new List<PropertyNode>();
