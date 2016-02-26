@@ -748,6 +748,8 @@ namespace Automao.Data
 					}
 
 					var property = type.GetProperty(item.JoinInfo.Name);
+					if(property==null)
+						continue;
 					//flag=true也要创建一个空实体，因为可能要创建这个空实体的导航属性
 					var propertyValue = CreateEntity(property.PropertyType, dic, item.Target.ClassNode);
 
