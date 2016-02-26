@@ -33,6 +33,7 @@ namespace Automao.Data.Mapping
 			_target = target;
 			_type = type;
 			_member = new Dictionary<PropertyNode, PropertyNode>();
+			_temp = new Dictionary<string, string>();
 		}
 		#endregion
 
