@@ -179,10 +179,23 @@ namespace Automao.Data.Mapping
 				if(_base != null)
 				{
 					var join = new JoinPropertyNode(_base._name, _base, JoinType.Inner);
-					var pks = _propertyNodeList.Where(p => p.IsKey);
-					foreach(var pk in pks)
+					var pks = _propertyNodeList.Where(p => p.IsKey).ToList();
+					if(pks.Count == 0)
 					{
-						join.Member.Add(pk, _base._propertyNodeList.First(p => p.IsKey && p.Name.Equals(pk.Name, StringComparison.OrdinalIgnoreCase)));
+						foreach(var pk in _base._propertyNodeList.Where(p => p.IsKey))
+						{
+							join.Member.Add(pk, pk);
+						}
+					}
+					else
+					{
+						foreach(var pk in pks)
+						{
+							PropertyNode pn = _base._propertyNodeList.First(p => p.IsKey && p.Name.Equals(pk.Name, StringComparison.OrdinalIgnoreCase));
+							if(pn == null)
+								throw new Exception(string.Format("继承时子类主键名称要和父类主键名称一致：{0} {1}",this._name,_base._name));
+							join.Member.Add(pk, pn);
+						}
 					}
 					_joinList.Add(join);
 				}
