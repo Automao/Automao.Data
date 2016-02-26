@@ -235,7 +235,7 @@ namespace Automao.Data
 			if(host.BaseClassNode == null)
 				return false;
 
-			if(IsParentProperty(host.BaseClassNode, floors++, property, out parents))
+			if(IsParentProperty(host.BaseClassNode, floors+1, property, out parents))
 			{
 				if(parents == null)
 					parents = new List<JoinPropertyNode>();

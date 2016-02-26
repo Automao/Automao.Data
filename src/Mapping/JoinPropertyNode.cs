@@ -92,8 +92,9 @@ namespace Automao.Data.Mapping
 				if(_target == null)
 					throw new Exception(string.Format("未找到{0}对应的节点,source:{1},join:{1}", _targetStr, host.Name, _name));
 			}
-
-			_member = new Dictionary<PropertyNode, PropertyNode>();
+			
+			if(_member==null)
+				_member = new Dictionary<PropertyNode, PropertyNode>();
 			foreach(var key in _temp.Keys)
 			{
 				var fromPropertyInfo = host.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(key, StringComparison.OrdinalIgnoreCase));
