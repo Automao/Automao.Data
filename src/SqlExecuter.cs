@@ -224,8 +224,11 @@ namespace Automao.Data
 
 			using(var command = connection.CreateCommand())
 			{
-				command.CommandText = string.Format(sql, parameters.Select(p => (object)p.ParameterName).ToArray());
-				command.Parameters.AddRange(parameters);
+				if(parameters != null && parameters.Length > 0)
+				{
+					command.CommandText = string.Format(sql, parameters.Select(p => (object)p.ParameterName).ToArray());
+					command.Parameters.AddRange(parameters);
+				}
 
 				var transaction = DbTransaction;
 				var startTransaction = transaction != null;

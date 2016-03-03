@@ -20,6 +20,7 @@ namespace Automao.Data.Mapping
 		private bool _unColumn;
 		private bool _passedIntoConstructor;
 		private string _constructorName;
+		private bool _sequenced;
 		#endregion
 
 		#region 构造函数
@@ -101,6 +102,14 @@ namespace Automao.Data.Mapping
 				return _constructorName;
 			}
 		}
+
+		public bool Sequenced
+		{
+			get
+			{
+				return _sequenced;
+			}
+		}
 		#endregion
 
 		public static PropertyNode Create(XElement property)
@@ -124,6 +133,9 @@ namespace Automao.Data.Mapping
 				propertyInfo._column = attribuleValue;
 			else
 				propertyInfo._unColumn = true;
+
+			if(MappingInfo.GetAttribuleValue(property, "sequenced", out attribuleValue))
+				propertyInfo._sequenced = true;
 
 			return propertyInfo;
 		}

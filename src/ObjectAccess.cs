@@ -513,7 +513,7 @@ namespace Automao.Data
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
 			var insertCount = 0;
-			var sqls = new List<KeyValuePair<string, DbParameter[]>>();
+			var sqls = new Dictionary<T, KeyValuePair<string, DbParameter[]>>();
 
 			var insertformat = "INSERT INTO {0}({1}) VALUES({2})";
 			var columnformat = "{0}";
@@ -530,16 +530,29 @@ namespace Automao.Data
 
 				var paramers = dic.Select((p, i) => CreateParameter(i, p.Value)).ToArray();
 
-				sqls.Add(new KeyValuePair<string, DbParameter[]>(sql, paramers));
+				sqls.Add(item, new KeyValuePair<string, DbParameter[]>(sql, paramers));
 			}
 
 			using(var executer = Executer.Keep())
 			{
-				foreach(var item in sqls)
+				foreach(var key in sqls.Keys)
 				{
+					var item = sqls[key];
 					var count = executer.Execute(item.Key, item.Value);
 					if(count > 0)
+					{
 						insertCount++;
+						if(info.PropertyNodeList.Any(p => p.Sequenced))
+						{
+							var property=info.EntityType.GetProperty(info.PropertyNodeList.FirstOrDefault(p => p.Sequenced).Name);
+							if(property != null)
+							{
+								var id = executer.ExecuteScalar("SELECT LAST_INSERT_ID()", null);
+								if(id != null)
+									property.SetValue(key, id);
+							}
+						}
+					}
 				}
 			}
 
@@ -709,9 +722,29 @@ namespace Automao.Data
 			if(entityType == typeof(object))
 				entityType = classInfo.ClassNode.EntityType;
 
+			string inheritAsName = null;
+			if(classInfo.ClassNode.BaseClassNode != null && classInfo.Joins != null)
+			{
+				var join = classInfo.Joins.FirstOrDefault(pp => pp.JoinInfo.Name.Equals(classInfo.ClassNode.BaseClassNode.Name, StringComparison.OrdinalIgnoreCase));
+				if(join != null)
+					inheritAsName = join.Target.AsName;
+			}
+
 			foreach(var row in table)
 			{
 				var values = row.Where(p => p.Key.StartsWith(classInfo.AsName + "_")).ToDictionary(p => p.Key.Substring(classInfo.AsName.Length + 1), p => p.Value);
+				if(inheritAsName != null)
+				{
+					var temp = row.Where(p => p.Key.StartsWith(inheritAsName + "_")).ToDictionary(p => p.Key.Substring(inheritAsName.Length + 1), p => p.Value);
+					foreach(var key in temp.Keys)
+					{
+						if(values.ContainsKey(key))
+							values.Add(string.Format("{0}(base)", key), temp[key]);
+						else
+							values.Add(key, temp[key]);
+					}
+				}
+
 				var entity = CreateEntity(entityType, values, classInfo.ClassNode);
 
 				var flag = values == null || values.Count == 0 || values.All(p => p.Value is System.DBNull);
@@ -748,7 +781,7 @@ namespace Automao.Data
 					}
 
 					var property = type.GetProperty(item.JoinInfo.Name);
-					if(property==null)
+					if(property == null)
 						continue;
 					//flag=true也要创建一个空实体，因为可能要创建这个空实体的导航属性
 					var propertyValue = CreateEntity(property.PropertyType, dic, item.Target.ClassNode);
@@ -844,6 +877,7 @@ namespace Automao.Data
 
 				property.SetValue(entity, propertyValue, null);
 			}
+
 			return entity;
 		}
 
