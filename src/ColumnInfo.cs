@@ -167,9 +167,22 @@ namespace Automao.Data
 				var key = string.Empty;
 				var host = root;
 				Join parent = null;
-				foreach(var property in array)
+				for(int i = 0; i < array.Length; )
 				{
+					var property = array[i];
+
 					var joinInfo = host.ClassNode.JoinList.FirstOrDefault(p => p.Name.Equals(property, System.StringComparison.OrdinalIgnoreCase));
+					if(joinInfo == null&&host.ClassNode.BaseClassNode!=null)
+					{
+						joinInfo = FindProperty(host.ClassNode.BaseClassNode, property);
+						if(joinInfo != null)
+						{
+							property = host.ClassNode.BaseClassNode.Name;
+							joinInfo = host.ClassNode.JoinList.FirstOrDefault(p => p.Name.Equals(property, System.StringComparison.OrdinalIgnoreCase));
+							i--;
+						}
+					}
+
 					if(joinInfo == null)//不是导航属性，就当它是普通属性
 					{
 						List<JoinPropertyNode> parents;
@@ -213,6 +226,8 @@ namespace Automao.Data
 						parent = join;
 						host = join.Target;
 					}
+
+					i++;
 				}
 
 				if(columnInfo != null)
@@ -220,6 +235,14 @@ namespace Automao.Data
 			}
 
 			return result;
+		}
+
+		public static JoinPropertyNode FindProperty(ClassNode host, string property)
+		{
+			var jpn = host.JoinList.FirstOrDefault(p => p.Name.Equals(property, System.StringComparison.OrdinalIgnoreCase));
+			if(jpn == null && host.BaseClassNode != null)
+				return FindProperty(host.BaseClassNode, property);
+			return jpn;
 		}
 
 		public static bool IsParentProperty(ClassNode host, int floors, string property, out List<JoinPropertyNode> parents)
