@@ -549,7 +549,7 @@ namespace Automao.Data
 							{
 								var id = executer.ExecuteScalar("SELECT LAST_INSERT_ID()", null);
 								if(id != null)
-									property.SetValue(key, id);
+									property.SetValue(key, Zongsoft.Common.Convert.ConvertValue(id,property.PropertyType));
 							}
 						}
 					}
@@ -783,7 +783,7 @@ namespace Automao.Data
 						continue;
 					}
 
-					if(item.JoinInfo.Name == classInfo.ClassNode.BaseClassNode.Name)
+					if(classInfo.ClassNode.BaseClassNode!=null&&item.JoinInfo.Name == classInfo.ClassNode.BaseClassNode.Name)
 					{
 						SetNavigationProperty(item.Target, entity, values);
 						continue;

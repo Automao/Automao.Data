@@ -229,6 +229,8 @@ namespace Automao.Data
 					command.CommandText = string.Format(sql, parameters.Select(p => (object)p.ParameterName).ToArray());
 					command.Parameters.AddRange(parameters);
 				}
+				else
+					command.CommandText = sql;
 
 				var transaction = DbTransaction;
 				var startTransaction = transaction != null;
@@ -242,12 +244,9 @@ namespace Automao.Data
 				{
 					if(connection.State == ConnectionState.Closed)
 						connection.Open();
-#if DEBUG
+
 					var result = command.ExecuteScalar();
 					return result;
-#else
-					return command.ExecuteScalar();
-#endif
 				}
 				finally
 				{
