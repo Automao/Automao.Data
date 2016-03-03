@@ -544,7 +544,7 @@ namespace Automao.Data
 						insertCount++;
 						if(info.PropertyNodeList.Any(p => p.Sequenced))
 						{
-							var property=info.EntityType.GetProperty(info.PropertyNodeList.FirstOrDefault(p => p.Sequenced).Name);
+							var property = info.EntityType.GetProperty(info.PropertyNodeList.FirstOrDefault(p => p.Sequenced).Name);
 							if(property != null)
 							{
 								var id = executer.ExecuteScalar("SELECT LAST_INSERT_ID()", null);
@@ -722,27 +722,30 @@ namespace Automao.Data
 			if(entityType == typeof(object))
 				entityType = classInfo.ClassNode.EntityType;
 
-			string inheritAsName = null;
-			if(classInfo.ClassNode.BaseClassNode != null && classInfo.Joins != null)
-			{
-				var join = classInfo.Joins.FirstOrDefault(pp => pp.JoinInfo.Name.Equals(classInfo.ClassNode.BaseClassNode.Name, StringComparison.OrdinalIgnoreCase));
-				if(join != null)
-					inheritAsName = join.Target.AsName;
-			}
-
 			foreach(var row in table)
 			{
 				var values = row.Where(p => p.Key.StartsWith(classInfo.AsName + "_")).ToDictionary(p => p.Key.Substring(classInfo.AsName.Length + 1), p => p.Value);
-				if(inheritAsName != null)
+
+				var currentClassInfo = classInfo;
+				while(currentClassInfo.ClassNode.BaseClassNode != null && currentClassInfo.Joins != null)
 				{
-					var temp = row.Where(p => p.Key.StartsWith(inheritAsName + "_")).ToDictionary(p => p.Key.Substring(inheritAsName.Length + 1), p => p.Value);
-					foreach(var key in temp.Keys)
+					var join = classInfo.Joins.FirstOrDefault(pp => pp.JoinInfo.Name.Equals(classInfo.ClassNode.BaseClassNode.Name, StringComparison.OrdinalIgnoreCase));
+					if(join != null)
 					{
-						if(values.ContainsKey(key))
-							values.Add(string.Format("{0}(base)", key), temp[key]);
-						else
-							values.Add(key, temp[key]);
+						currentClassInfo = join.Target;
+						var asName = join.Target.AsName;
+
+						var temp = row.Where(p => p.Key.StartsWith(asName + "_")).ToDictionary(p => p.Key.Substring(asName.Length + 1), p => p.Value);
+						foreach(var key in temp.Keys)
+						{
+							if(values.ContainsKey(key))
+								values.Add(string.Format("{0}(base)", key), temp[key]);
+							else
+								values.Add(key, temp[key]);
+						}
 					}
+					else
+						break;
 				}
 
 				var entity = CreateEntity(entityType, values, classInfo.ClassNode);
@@ -777,6 +780,12 @@ namespace Automao.Data
 						SetNavigationProperty(item.Target, dic, values);
 						((IDictionary)entity).Add(item.JoinInfo.Name, dic);
 						success = true;
+						continue;
+					}
+
+					if(item.JoinInfo.Name == classInfo.ClassNode.BaseClassNode.Name)
+					{
+						SetNavigationProperty(item.Target, entity, values);
 						continue;
 					}
 
