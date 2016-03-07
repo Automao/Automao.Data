@@ -961,8 +961,8 @@ namespace Automao.Data
 			if(condition == null)
 				return null;
 
-			if(condition is Conditional)
-				condition = ((Conditional)condition).ToConditions();
+			if(condition is IConditional)
+				condition = ((IConditional)condition).ToConditions();
 
 			if(condition is Condition)
 			{

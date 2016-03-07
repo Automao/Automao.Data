@@ -46,8 +46,8 @@ namespace Automao.Data
 
 		private static string Resolve(ICondition condition, Dictionary<string, ColumnInfo> columnInfos, ref int tableIndex, ref int joinStartIndex, ref int valueIndex, out object[] values)
 		{
-			if(condition is Conditional)
-				condition = ((Conditional)condition).ToConditions();
+			if(condition is IConditional)
+				condition = ((IConditional)condition).ToConditions();
 
 			if(condition is Condition)
 			{
