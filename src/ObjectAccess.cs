@@ -958,11 +958,11 @@ namespace Automao.Data
 		#region 私有方法
 		private string[] GetConditionName(ICondition condition)
 		{
-			if(condition == null)
-				return null;
-
 			if(condition is IConditional)
 				condition = ((IConditional)condition).ToConditions();
+				
+			if(condition == null)
+				return null;
 
 			if(condition is Condition)
 			{
