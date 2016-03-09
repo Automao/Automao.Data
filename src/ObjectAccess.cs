@@ -605,7 +605,7 @@ namespace Automao.Data
 					if(pks == null || pks.Count == 0)
 						throw new ArgumentException("未设置Condition，也未找到主键");
 
-					var newCondition = new ConditionCollection(ConditionCombine.And, pks.Select(p => new Condition(p.Key.Name, p.Value)));
+					var newCondition = new ConditionCollection(ConditionCombination.And, pks.Select(p => new Condition(p.Key.Name, p.Value)));
 
 					classInfo.Joins.Clear();
 					var columnInfos = CreateColumnInfo(pks.Select(p => p.Key.Name), classInfo);

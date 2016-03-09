@@ -91,7 +91,7 @@ namespace Automao.Data
 				if(sqls.Count == 1)
 					return sqls[0];
 
-				return string.Join(where.ConditionCombine.Parse(), sqls);
+				return string.Join(where.ConditionCombination.Parse(), sqls);
 			}
 
 			values = new object[0];
@@ -167,11 +167,11 @@ namespace Automao.Data
 			}
 		}
 
-		private static string Parse(this ConditionCombine combine)
+		private static string Parse(this ConditionCombination combine)
 		{
 			switch(combine)
 			{
-				case ConditionCombine.Or:
+				case ConditionCombination.Or:
 					return " OR ";
 				default:
 					return " AND ";
