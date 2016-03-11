@@ -503,17 +503,20 @@ namespace Automao.Data
 		#endregion
 
 		#region 新增
-		protected override int Insert<T>(string name, IEnumerable<T> entities, string[] includes)
+		protected override int InsertMany(string name, IEnumerable entities, string[] includes)
 		{
 			if(string.IsNullOrEmpty(name))
-				name = typeof(T).Name;
+				throw new ArgumentNullException("name");
+
+			if(entities == null)
+				return 0;
 
 			var info = MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 			if(info == null)
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
 			var insertCount = 0;
-			var sqls = new Dictionary<T, KeyValuePair<string, DbParameter[]>>();
+			var sqls = new Dictionary<object, KeyValuePair<string, DbParameter[]>>();
 
 			var insertformat = "INSERT INTO {0}({1}) VALUES({2})";
 			var columnformat = "{0}";
@@ -561,10 +564,10 @@ namespace Automao.Data
 		#endregion
 
 		#region 修改
-		protected override int Update<T>(string name, IEnumerable<T> entities, ICondition condition, string[] members)
+		protected override int UpdateMany(string name, IEnumerable entities, ICondition condition, string[] members)
 		{
 			if(string.IsNullOrEmpty(name))
-				name = typeof(T).Name;
+				throw new ArgumentNullException("name");
 
 			if(members == null || members.Length == 0)
 				throw new ArgumentNullException("members");
