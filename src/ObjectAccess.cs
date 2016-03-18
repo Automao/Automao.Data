@@ -977,7 +977,12 @@ namespace Automao.Data
 				var list = new List<string>();
 				foreach(var item in (ConditionCollection)condition)
 				{
-					list.AddRange(GetConditionName(item));
+					string[] conditionName;
+
+					if(item != null && (conditionName = GetConditionName(item)) != null)
+					{
+						list.AddRange(conditionName);
+					}
 				}
 
 				return list.ToArray();
