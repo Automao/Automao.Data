@@ -71,7 +71,7 @@ namespace Automao.Data.MySql
 			if(!string.IsNullOrEmpty(parameter.Orderby))
 				sql += " " + parameter.Orderby;
 
-			if(parameter.Paging != null)
+			if(parameter.Paging != null && parameter.Paging.PageSize > 0)
 			{
 				if(parameter.Paging.PageIndex < 1)
 					parameter.Paging.PageIndex = 1;
