@@ -705,6 +705,49 @@ namespace Automao.Data
 		}
 		#endregion
 
+		public override long Increment(string name, string member, ICondition condition, int interval = 1)
+		{
+			if(string.IsNullOrWhiteSpace(name))
+				throw new ArgumentNullException("name");
+			if(string.IsNullOrWhiteSpace(member))
+				throw new ArgumentNullException("member");
+			if(condition == null)
+				throw new ArgumentNullException("condition");
+
+			var info = MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+			if(info == null)
+				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
+
+			var classInfo = CreateClassInfo("T", info);
+			var tableName = classInfo.GetTableName();
+			var columnInfo = CreateColumnInfo(member);
+
+			var whereValues = new object[0];
+			int tableIndex = 0;
+			int joinStartIndex = 0;
+			int valueIndex = 0;
+			string wheresql = string.Empty;
+			var columns = GetConditionName(condition);
+			var columnInofs = CreateColumnInfo(columns, classInfo);
+			classInfo.SetJoinIndex(0);
+			wheresql = condition.ToWhere(columnInofs, ref tableIndex, ref joinStartIndex, ref valueIndex, out whereValues);
+			var paramers = CreateParameters(0, whereValues);
+
+			var sql = string.Format("UPDATE {0} SET {1}={1}+({2}) WHERE {3}",
+									tableName, columnInfo.ToColumn(), interval, wheresql);
+
+			using(var executer = Executer.Keep())
+			{
+				if(executer.Execute(sql, paramers) > 0)
+				{
+					sql = string.Format("SELECT {0} FROM {1} WHERE {2}", columnInfo.ToColumn(), tableName, wheresql);
+					return Zongsoft.Common.Convert.ConvertValue<long>(executer.ExecuteScalar(sql, paramers));
+				}
+			}
+
+			return -1;
+		}
+
 		protected override Type GetEntityType(string name)
 		{
 			return MappingInfo.ClassNodeList.Where(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Select(p => p.EntityType).FirstOrDefault();
