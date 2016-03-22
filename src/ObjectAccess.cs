@@ -733,14 +733,14 @@ namespace Automao.Data
 			wheresql = condition.ToWhere(columnInofs, ref tableIndex, ref joinStartIndex, ref valueIndex, out whereValues);
 			var paramers = CreateParameters(0, whereValues);
 
-			var sql = string.Format("UPDATE {0} SET {1}={1}+({2}) WHERE {3}",
+			var sql = string.Format("UPDATE {0} SET {1}={1}+({2}) {3}",
 									tableName, columnInfo.ToColumn(), interval, wheresql);
 
 			using(var executer = Executer.Keep())
 			{
 				if(executer.Execute(sql, paramers) > 0)
 				{
-					sql = string.Format("SELECT {0} FROM {1} WHERE {2}", columnInfo.ToColumn(), tableName, wheresql);
+					sql = string.Format("SELECT {0} FROM {1} {2}", columnInfo.ToColumn(), tableName, wheresql);
 					return Zongsoft.Common.Convert.ConvertValue<long>(executer.ExecuteScalar(sql, paramers));
 				}
 			}
