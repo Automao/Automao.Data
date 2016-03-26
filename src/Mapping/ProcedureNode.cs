@@ -64,7 +64,7 @@ namespace Automao.Data.Mapping
 		public string GetProcedureName(bool caseSensitive)
 		{
 			var schema = string.IsNullOrEmpty(_schema) ? "" : (_schema + ".");
-			var procedureName = string.Format(caseSensitive ? "{0}\"{1}\"" : "{0}{1}", schema + _procedure);
+			var procedureName = string.Format(caseSensitive ? "{0}\"{1}\"" : "{0}{1}", schema, _procedure);
 			return procedureName;
 		}
 		#endregion
