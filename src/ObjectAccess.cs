@@ -447,7 +447,52 @@ namespace Automao.Data
 		#endregion
 
 		#region 执行
-		public override object Execute(string name, IDictionary<string, object> inParameters, out IDictionary<string, object> outParameters)
+		public override IEnumerable<T> Execute<T>(string name, IDictionary<string, object> inParameters, out IDictionary<string, object> outParameters)
+		{
+			ClassNode classInfo = null;
+			var procedureInfo = this.MappingInfo.ProcedureNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+			if(procedureInfo == null)
+			{
+				classInfo = this.MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+				if(classInfo != null)
+					procedureInfo = this.MappingInfo.ProcedureNodeList.FirstOrDefault(p => p.Name.Equals(classInfo.Table, StringComparison.OrdinalIgnoreCase));
+			}
+
+			if(procedureInfo == null)
+				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
+
+			Dictionary<string, object> dic;
+			var paramers = inParameters.Where(p => p.Value != null).Select((p, i) =>
+			{
+				var parameterName = p.Key;
+				var dbType = "";
+				bool isInOutPut = false;
+				int? size = null;
+				if(procedureInfo != null)
+				{
+					var item = procedureInfo.ParameterList.FirstOrDefault(pp => pp.Name.Equals(p.Key, StringComparison.CurrentCultureIgnoreCase));
+					if(item != null)
+					{
+						parameterName = item.Name;
+						dbType = item.DbType;
+						isInOutPut = item.IsOutPut;
+						size = item.Size;
+					}
+				}
+				return CreateParameter(i, p.Value, dbType, parameterName, false, isInOutPut, size, true);
+			}).ToList();
+
+			paramers.AddRange(procedureInfo.ParameterList.Where(p => !inParameters.ContainsKey(p.Name)).Select((p, i) => CreateParameter(paramers.Count + i, null, p.DbType, p.Name, p.IsOutPut, false, p.Size, true)).ToArray());
+
+			var procedureName = GetProcedureName(procedureInfo);
+			var tablevalues = Executer.ExecuteProcedure(procedureName, paramers.ToArray(), out dic);
+
+			outParameters = dic.ToDictionary(p => p.Key, p => p.Value);
+
+			return tablevalues.Select(p => (T)CreateEntity(typeof(T), p, null));
+		}
+
+		public override object ExecuteScalar(string name, IDictionary<string, object> inParameters, out IDictionary<string, object> outParameters)
 		{
 			ClassNode classInfo = null;
 			var procedureInfo = this.MappingInfo.ProcedureNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -866,33 +911,41 @@ namespace Automao.Data
 			System.Reflection.ParameterInfo[] cpinfo;
 			System.Reflection.PropertyInfo[] properties;
 
-			object[] instanceArgs;
-			var constructorPropertys = classNode.PropertyNodeList.Where(p => p.PassedIntoConstructor).ToList();
+			object[] instanceArgs = null;
 
-			if(!_typeDictionary.TryGetValue(entityType, out dicValue) || dicValue.Value == null)
+			if(classNode != null)
 			{
-				cpinfo = entityType.GetConstructors().Where(p => p.IsPublic).Select(p => p.GetParameters()).FirstOrDefault(p => p.Length == constructorPropertys.Count);
-				properties = entityType.GetProperties().OrderBy(p => p.Name).ToArray();
-				_typeDictionary.TryAdd(entityType, new KeyValuePair<System.Reflection.ParameterInfo[], System.Reflection.PropertyInfo[]>(cpinfo, properties));
+				var constructorPropertys = classNode.PropertyNodeList.Where(p => p.PassedIntoConstructor).ToList();
+
+				if(!_typeDictionary.TryGetValue(entityType, out dicValue) || dicValue.Value == null)
+				{
+					cpinfo = entityType.GetConstructors().Where(p => p.IsPublic).Select(p => p.GetParameters()).FirstOrDefault(p => p.Length == constructorPropertys.Count);
+					properties = entityType.GetProperties().OrderBy(p => p.Name).ToArray();
+					_typeDictionary.TryAdd(entityType, new KeyValuePair<System.Reflection.ParameterInfo[], System.Reflection.PropertyInfo[]>(cpinfo, properties));
+				}
+				else
+				{
+					cpinfo = dicValue.Key;
+					properties = dicValue.Value;
+				}
+
+				instanceArgs = new object[constructorPropertys.Count];
+				constructorPropertys.ForEach(p =>
+				{
+					var tempValue = propertyValues.FirstOrDefault(pp => pp.Key.Equals(p.Column, StringComparison.OrdinalIgnoreCase));
+					var args = cpinfo == null ? null : cpinfo.FirstOrDefault(pp => pp.Name.Equals(p.ConstructorName, StringComparison.OrdinalIgnoreCase));
+					if(args != null)
+						instanceArgs[args.Position] = Zongsoft.Common.Convert.ConvertValue(tempValue.Value, args.ParameterType);
+				});
 			}
 			else
 			{
-				cpinfo = dicValue.Key;
-				properties = dicValue.Value;
+				properties = entityType.GetProperties().OrderBy(p => p.Name).ToArray();
 			}
-
-			instanceArgs = new object[constructorPropertys.Count];
-			constructorPropertys.ForEach(p =>
-			{
-				var tempValue = propertyValues.FirstOrDefault(pp => pp.Key.Equals(p.Column, StringComparison.OrdinalIgnoreCase));
-				var args = cpinfo == null ? null : cpinfo.FirstOrDefault(pp => pp.Name.Equals(p.ConstructorName, StringComparison.OrdinalIgnoreCase));
-				if(args != null)
-					instanceArgs[args.Position] = Zongsoft.Common.Convert.ConvertValue(tempValue.Value, args.ParameterType);
-			});
 
 			object entity;
 
-			if(instanceArgs.Length == 0)
+			if(instanceArgs == null || instanceArgs.Length == 0)
 				entity = Activator.CreateInstance(entityType);
 			else
 			{
@@ -909,14 +962,23 @@ namespace Automao.Data
 				}
 			}
 
-
 			foreach(var property in properties)
 			{
 				if(!property.CanWrite)
 					continue;
+
 				var isClass = property.PropertyType.IsClass && property.PropertyType != typeof(string) && !property.PropertyType.IsArray;
 				if(isClass)
+				{
+					var tempDictionary = propertyValues.Where(p => p.Key.StartsWith(property.Name + ".")).ToDictionary(p => p.Key.Substring(property.Name.Length + 1), p => p.Value);
+
+					if(tempDictionary.Count > 0)
+					{
+						property.SetValue(entity, CreateEntity(property.PropertyType, tempDictionary, null));
+					}
+
 					continue;
+				}
 
 				var propertyInfo = classNode == null ? null : classNode.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(property.Name, StringComparison.CurrentCultureIgnoreCase));
 				if(propertyInfo != null && string.IsNullOrEmpty(propertyInfo.Column))
