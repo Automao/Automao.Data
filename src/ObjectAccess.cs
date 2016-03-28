@@ -25,14 +25,18 @@
  */
 
 using System;
+using System.ComponentModel;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
+
 using Automao.Data.Mapping;
 using Automao.Data.Options.Configuration;
+
 using Zongsoft.Common;
 using Zongsoft.Data;
 
@@ -40,6 +44,10 @@ namespace Automao.Data
 {
 	public abstract class ObjectAccess : DataAccessBase
 	{
+		#region 私有字段
+		private ConcurrentDictionary<Type, EntityDesciptior> _entityCache;
+		#endregion
+
 		#region 字段
 		private SqlExecuter _executer;
 		private DbProviderFactory _providerFactory;
@@ -48,11 +56,9 @@ namespace Automao.Data
 		#endregion
 
 		#region 构造函数
-		/// <summary>
-		/// 
-		/// </summary>
-		public ObjectAccess(DbProviderFactory providerFactory)
+		protected ObjectAccess(DbProviderFactory providerFactory)
 		{
+			_entityCache = new ConcurrentDictionary<Type, EntityDesciptior>();
 			_providerFactory = providerFactory;
 			_typeDictionary = new ConcurrentDictionary<Type, KeyValuePair<System.Reflection.ParameterInfo[], System.Reflection.PropertyInfo[]>>();
 		}
@@ -95,10 +101,19 @@ namespace Automao.Data
 		}
 		#endregion
 
+		#region 虚拟属性
+		protected virtual bool IsScalarType(Type type)
+		{
+			return Zongsoft.Common.TypeExtension.IsScalarType(type) || typeof(Expression).IsAssignableFrom(type);
+		}
+		#endregion
+
 		#region Base成员
 		#region 查询
-		protected override IEnumerable<T> Select<T>(string name, ICondition condition, string[] members, Paging paging, Grouping grouping, Sorting[] sorting)
+		protected override IEnumerable<T> OnSelect<T>(string name, ICondition condition, Grouping grouping, string scope, Paging paging, Sorting[] sorting)
 		{
+			var members = this.ResolveScope(name, scope, typeof(T));
+
 			if(string.IsNullOrEmpty(name))
 				name = typeof(T).Name;
 
@@ -362,7 +377,7 @@ namespace Automao.Data
 		#endregion
 
 		#region Count
-		protected override int Count(string name, ICondition condition, string[] includes)
+		protected override int OnCount(string name, ICondition condition, string[] includes)
 		{
 			if(string.IsNullOrEmpty(name))
 				throw new ArgumentNullException("name");
@@ -418,7 +433,7 @@ namespace Automao.Data
 		#endregion
 
 		#region 删除
-		protected override int Delete(string name, ICondition condition, string[] cascades)
+		protected override int OnDelete(string name, ICondition condition, string[] cascades)
 		{
 			if(cascades != null && cascades.Length > 0)
 				throw new NotSupportedException();
@@ -447,7 +462,7 @@ namespace Automao.Data
 		#endregion
 
 		#region 执行
-		public override IEnumerable<T> Execute<T>(string name, IDictionary<string, object> inParameters, out IDictionary<string, object> outParameters)
+		protected override IEnumerable<T> OnExecute<T>(string name, IDictionary<string, object> inParameters, out IDictionary<string, object> outParameters)
 		{
 			ClassNode classInfo = null;
 			var procedureInfo = this.MappingInfo.ProcedureNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -492,7 +507,7 @@ namespace Automao.Data
 			return tablevalues.Select(p => (T)CreateEntity(typeof(T), p, null));
 		}
 
-		public override object ExecuteScalar(string name, IDictionary<string, object> inParameters, out IDictionary<string, object> outParameters)
+		protected override object OnExecuteScalar(string name, IDictionary<string, object> inParameters, out IDictionary<string, object> outParameters)
 		{
 			ClassNode classInfo = null;
 			var procedureInfo = this.MappingInfo.ProcedureNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -548,7 +563,7 @@ namespace Automao.Data
 		#endregion
 
 		#region 新增
-		protected override int InsertMany(string name, IEnumerable entities, string[] includes)
+		protected override int OnInsertMany(string name, IEnumerable entities, string scope)
 		{
 			if(string.IsNullOrEmpty(name))
 				throw new ArgumentNullException("name");
@@ -556,6 +571,7 @@ namespace Automao.Data
 			if(entities == null)
 				return 0;
 
+			var includes = this.ResolveScope(name, scope, null);
 			var info = MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 			if(info == null)
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
@@ -609,10 +625,12 @@ namespace Automao.Data
 		#endregion
 
 		#region 修改
-		protected override int UpdateMany(string name, IEnumerable entities, ICondition condition, string[] members)
+		protected override int OnUpdateMany(string name, IEnumerable entities, ICondition condition, string scope)
 		{
 			if(string.IsNullOrEmpty(name))
 				throw new ArgumentNullException("name");
+
+			var members = this.ResolveScope(name, scope, null);
 
 			if(members == null || members.Length == 0)
 				throw new ArgumentNullException("members");
@@ -793,7 +811,7 @@ namespace Automao.Data
 			return -1;
 		}
 
-		protected override Type GetEntityType(string name)
+		protected virtual Type GetEntityType(string name)
 		{
 			return MappingInfo.ClassNodeList.Where(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Select(p => p.EntityType).FirstOrDefault();
 		}
@@ -1133,6 +1151,210 @@ namespace Automao.Data
 				return false;
 
 			return join.Parent.JoinInfo.Type == JoinType.Left || ParentHasLeftJoin(join.Parent);
+		}
+
+		private string[] ResolveScope(string entityName, string scope, Type entityType)
+		{
+			if(string.IsNullOrWhiteSpace(entityName))
+				throw new ArgumentNullException("entityName");
+
+			var isWeakType = entityType != null && (typeof(IDictionary).IsAssignableFrom(entityType) || Zongsoft.Common.TypeExtension.IsAssignableFrom(typeof(IDictionary<,>), entityType));
+
+			if(entityType == null || isWeakType)
+				entityType = this.GetEntityType(entityName);
+
+			var entityDescriptor = _entityCache.GetOrAdd(entityType, type => new EntityDesciptior(this, entityName, type));
+			return this.ResolveScope(entityDescriptor, scope, isWeakType).ToArray();
+		}
+
+		private HashSet<string> ResolveScope(EntityDesciptior entity, string scope, bool isWeakType)
+		{
+			var result = new HashSet<string>(entity.Properties.Where(p => p.IsScalarType).Select(p => p.PropertyName), StringComparer.OrdinalIgnoreCase);
+
+			if(string.IsNullOrWhiteSpace(scope))
+				return result;
+
+			var members = scope.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+
+			for(int i = 0; i < members.Length; i++)
+			{
+				var member = members[i].Trim();
+
+				if(member.Length == 0)
+					continue;
+
+				switch(member[0])
+				{
+					case '-':
+					case '!':
+						if(member.Length > 1)
+							result.Remove(member.Substring(1));
+						else
+							result.Clear();
+
+						break;
+					case '*':
+						if(member.Length != 1)
+							throw new ArgumentException("scope");
+
+						result.UnionWith(entity.Properties.SelectMany(p =>
+						{
+							if(p.IsScalarType)
+								return new string[] { p.PropertyName };
+
+							var list = new List<string>();
+							this.GetComplexPropertyMembers(entity.EntityName, p.PropertyName, p.PropertyType, list, new HashSet<Type>(new Type[] { p.PropertyType }));
+							return list.ToArray();
+						}));
+
+						break;
+					default:
+						if((member[0] >= 'A' && member[0] <= 'Z') || (member[0] >= 'a' && member[0] <= 'z') || member[0] == '_')
+						{
+							EntityPropertyDescriptor property = null;
+
+							if(member.Contains("."))
+							{
+								var navigationProperty = GetNavigationProperty(member, entity.EntityType, isWeakType);
+
+								if(navigationProperty != null)
+									property = new EntityPropertyDescriptor(member, navigationProperty.PropertyType, this.IsScalarType(navigationProperty.PropertyType));
+							}
+							else
+							{
+								property = entity.Properties.FirstOrDefault(p => string.Equals(p.PropertyName, member, StringComparison.OrdinalIgnoreCase));
+							}
+
+							if(property == null)
+							{
+								if(isWeakType)
+								{
+									result.Add(member);
+									continue;
+								}
+
+								throw new ArgumentException(string.Format("The '{0}' property is not exists in the '{1}' entity.", member, entity.EntityName));
+							}
+
+							if(property.IsScalarType)
+								result.Add(member);
+							else
+							{
+								var list = new List<string>();
+								this.GetComplexPropertyMembers(entity.EntityName, property.PropertyName, property.PropertyType, list, null);
+								result.UnionWith(list);
+							}
+						}
+						else
+						{
+							throw new ArgumentException(string.Format("Invalid '{0}' member in the '{1}' scope.", member, scope));
+						}
+
+						break;
+				}
+			}
+
+			return result;
+		}
+
+		private PropertyDescriptor GetNavigationProperty(string path, Type type, bool isWeakType)
+		{
+			if(string.IsNullOrWhiteSpace(path))
+				return null;
+
+			var parts = path.Split(new char[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
+			PropertyDescriptor property = null;
+
+			foreach(var part in parts)
+			{
+				property = TypeDescriptor.GetProperties(type).Find(part, true);
+
+				if(property == null)
+					throw new ArgumentException(string.Format("The '{0}' member is not existed in the '{1}' type, the original text is '{2}'.", part, type.FullName, path));
+
+				type = property.PropertyType;
+			}
+
+			return property;
+		}
+
+		private void GetComplexPropertyMembers(string entityName, string memberPrefix, Type memberType, ICollection<string> collection, HashSet<Type> recursiveStack)
+		{
+			foreach(PropertyDescriptor property in TypeDescriptor.GetProperties(memberType))
+			{
+				if(this.IsScalarType(property.PropertyType))
+					collection.Add(memberPrefix + "." + property.Name);
+				else if(recursiveStack != null && !recursiveStack.Contains(property.PropertyType))
+				{
+					recursiveStack.Add(property.PropertyType);
+					GetComplexPropertyMembers(entityName, memberPrefix + "." + property.Name, property.PropertyType, collection, recursiveStack);
+				}
+			}
+		}
+		#endregion
+
+		#region 嵌套子类
+		private class EntityDesciptior
+		{
+			public readonly string EntityName;
+			public readonly Type EntityType;
+
+			private readonly ObjectAccess _dataAccess;
+			private EntityPropertyDescriptor[] _properties;
+
+			public EntityDesciptior(ObjectAccess dataAccess, string entityName, Type entityType)
+			{
+				_dataAccess = dataAccess;
+
+				if(string.IsNullOrWhiteSpace(entityName))
+					throw new ArgumentNullException("entityName");
+
+				this.EntityName = entityName;
+				this.EntityType = entityType;
+			}
+
+			public EntityPropertyDescriptor[] Properties
+			{
+				get
+				{
+					if(_properties == null)
+					{
+						lock (this)
+						{
+							if(_properties == null)
+								this.InitializeProperties(this.EntityType);
+						}
+					}
+
+					return _properties;
+				}
+			}
+
+			private void InitializeProperties(Type type)
+			{
+				var properties = type.GetProperties(BindingFlags.Instance | BindingFlags.Public);
+
+				_properties = new EntityPropertyDescriptor[properties.Length];
+
+				for(int i = 0; i < properties.Length; i++)
+				{
+					_properties[i] = new EntityPropertyDescriptor(properties[i].Name, properties[i].PropertyType, _dataAccess.IsScalarType(properties[i].PropertyType));
+				}
+			}
+		}
+
+		private class EntityPropertyDescriptor
+		{
+			public readonly string PropertyName;
+			public readonly Type PropertyType;
+			public readonly bool IsScalarType;
+
+			public EntityPropertyDescriptor(string propertyName, Type propertyType, bool isScalarType)
+			{
+				this.PropertyName = propertyName;
+				this.PropertyType = propertyType;
+				this.IsScalarType = isScalarType;
+			}
 		}
 		#endregion
 	}

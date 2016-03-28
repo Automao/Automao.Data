@@ -12,11 +12,11 @@ namespace Automao.Data.Tests
 {
 	public class Test
 	{
-		private MySqlDataAccess _db;
+		private Automao.Data.MySql.MySqlDataAccess _db;
 
 		public Test()
 		{
-			_db = new MySqlDataAccess();
+			_db = new Automao.Data.MySql.MySqlDataAccess();
 
 			_db.Option = new Options.Configuration.GeneralOption();
 			_db.Option.ConnectionString = "server=ip:port;user id=root;Password=******;database=db;persist security info=False";
