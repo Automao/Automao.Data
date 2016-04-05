@@ -322,8 +322,6 @@ namespace Automao.Data
 					var item = tablevalues.FirstOrDefault();
 					parameter.Paging.TotalCount = Zongsoft.Common.Convert.ConvertValue<int>(item.Values.First());
 
-					if(parameter.Paging.PageIndex > parameter.Paging.PageCount)
-						parameter.Paging.PageIndex = parameter.Paging.PageCount;
 				}
 			}
 
@@ -359,6 +357,9 @@ namespace Automao.Data
 
 				sql = CreateSelectSql(subparameter);
 			}
+
+			//if(parameter.Paging != null && parameter.Paging.PageIndex > parameter.Paging.PageCount)
+			//	parameter.Paging.PageIndex = parameter.Paging.PageCount;
 
 			return new CreateSqlResult(sql, values);
 		}
@@ -571,7 +572,6 @@ namespace Automao.Data
 			if(entities == null)
 				return 0;
 
-			var includes = this.ResolveScope(name, scope, null);
 			var info = MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 			if(info == null)
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
@@ -584,6 +584,10 @@ namespace Automao.Data
 			var tableName = CreateClassInfo("", info).GetTableName();
 			foreach(var item in entities)
 			{
+				if(item == null)
+					continue;
+
+				var includes = this.ResolveScope(name, scope, item.GetType());
 				Dictionary<PropertyNode, object> pks;
 				var dic = GetColumnFromEntity(info, item, null, out pks).Where(p => p.Value != null && includes.Contains(p.Key.Name, StringComparer.OrdinalIgnoreCase)).ToDictionary(p => p.Key, p => p.Value);
 
@@ -630,11 +634,6 @@ namespace Automao.Data
 			if(string.IsNullOrEmpty(name))
 				throw new ArgumentNullException("name");
 
-			var members = this.ResolveScope(name, scope, null);
-
-			if(members == null || members.Length == 0)
-				throw new ArgumentNullException("members");
-
 			var info = MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 			if(info == null)
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
@@ -663,6 +662,14 @@ namespace Automao.Data
 
 			foreach(var entity in entities)
 			{
+				if(entity == null)
+					continue;
+
+				var members = this.ResolveScope(name, scope, entity.GetType());
+
+				if(members == null || members.Length == 0)
+					throw new ArgumentNullException("members");
+
 				Dictionary<PropertyNode, object> pks;
 				var dic = GetColumnFromEntity(info, entity, members, out pks);
 
