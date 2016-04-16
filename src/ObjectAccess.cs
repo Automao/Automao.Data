@@ -109,6 +109,18 @@ namespace Automao.Data
 		#endregion
 
 		#region Base成员
+		public override string[] GetKey(string name)
+		{
+			if(string.IsNullOrEmpty(name))
+				throw new ArgumentNullException("name");
+
+			var info = MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+			if(info == null)
+				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
+
+			return info.PropertyNodeList.Where(p => p.IsKey).Select(p => p.Name).ToArray();
+		}
+
 		#region 查询
 		protected override IEnumerable<T> OnSelect<T>(string name, ICondition condition, Grouping grouping, string scope, Paging paging, Sorting[] sorting)
 		{
