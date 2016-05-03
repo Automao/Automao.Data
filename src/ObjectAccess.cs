@@ -27,8 +27,8 @@
 using System;
 using System.ComponentModel;
 using System.Collections;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Data.Common;
 using System.Linq;
 using System.Linq.Expressions;
@@ -37,8 +37,8 @@ using System.Reflection;
 using Automao.Data.Mapping;
 using Automao.Data.Options.Configuration;
 
-using Zongsoft.Common;
 using Zongsoft.Data;
+using Zongsoft.Common;
 
 namespace Automao.Data
 {
@@ -576,12 +576,12 @@ namespace Automao.Data
 		#endregion
 
 		#region 新增
-		protected override int OnInsertMany(string name, IEnumerable entities, string scope)
+		protected override int OnInsertMany(string name, IEnumerable<DataDictionary> items, string scope)
 		{
 			if(string.IsNullOrEmpty(name))
 				throw new ArgumentNullException("name");
 
-			if(entities == null)
+			if(items == null)
 				return 0;
 
 			var info = MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -594,7 +594,7 @@ namespace Automao.Data
 			var insertformat = "INSERT INTO {0}({1}) VALUES({2})";
 			var columnformat = "{0}";
 			var tableName = CreateClassInfo("", info).GetTableName();
-			foreach(var item in entities)
+			foreach(var item in items)
 			{
 				if(item == null)
 					continue;
@@ -641,7 +641,7 @@ namespace Automao.Data
 		#endregion
 
 		#region 修改
-		protected override int OnUpdateMany(string name, IEnumerable entities, ICondition condition, string scope)
+		protected override int OnUpdateMany(string name, IEnumerable<DataDictionary> items, ICondition condition, string scope)
 		{
 			if(string.IsNullOrEmpty(name))
 				throw new ArgumentNullException("name");
@@ -672,18 +672,18 @@ namespace Automao.Data
 				wheresql = condition.ToWhere(columnInofs, ref tableIndex, ref joinStartIndex, ref valueIndex, out whereValues);
 			}
 
-			foreach(var entity in entities)
+			foreach(var item in items)
 			{
-				if(entity == null)
+				if(item == null)
 					continue;
 
-				var members = this.ResolveScope(name, scope, entity.GetType());
+				var members = this.ResolveScope(name, scope, item.GetType());
 
 				if(members == null || members.Length == 0)
 					throw new ArgumentNullException("members");
 
 				Dictionary<PropertyNode, object> pks;
-				var dic = GetColumnFromEntity(info, entity, members, out pks);
+				var dic = GetColumnFromEntity(info, item, members, out pks);
 
 				if(condition == null)//condition为空则跟据主键修改
 				{
