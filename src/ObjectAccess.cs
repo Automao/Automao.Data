@@ -599,7 +599,8 @@ namespace Automao.Data
 				if(item == null)
 					continue;
 
-				var includes = this.ResolveScope(name, scope, item.GetType());
+				string[] includes = this.ResolveScope(name, scope, item.Data.GetType());
+
 				Dictionary<PropertyNode, object> pks;
 				var dic = GetColumnFromEntity(info, item, null, out pks).Where(p => p.Value != null && includes.Contains(p.Key.Name, StringComparer.OrdinalIgnoreCase)).ToDictionary(p => p.Key, p => p.Value);
 
@@ -677,7 +678,7 @@ namespace Automao.Data
 				if(item == null)
 					continue;
 
-				var members = this.ResolveScope(name, scope, item.GetType());
+				string[] members = this.ResolveScope(name, scope, item.Data.GetType());
 
 				if(members == null || members.Length == 0)
 					throw new ArgumentNullException("members");
