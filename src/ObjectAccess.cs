@@ -589,7 +589,7 @@ namespace Automao.Data
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
 			var insertCount = 0;
-			var sqls = new Dictionary<object, KeyValuePair<string, DbParameter[]>>();
+			var sqls = new Dictionary<DataDictionary, KeyValuePair<string, DbParameter[]>>();
 
 			var insertformat = "INSERT INTO {0}({1}) VALUES({2})";
 			var columnformat = "{0}";
@@ -623,15 +623,18 @@ namespace Automao.Data
 					if(count > 0)
 					{
 						insertCount++;
+
 						if(info.PropertyNodeList.Any(p => p.Sequenced))
 						{
-							var property = info.EntityType.GetProperty(info.PropertyNodeList.FirstOrDefault(p => p.Sequenced).Name);
-							if(property != null)
-							{
-								var id = executer.ExecuteScalar("SELECT LAST_INSERT_ID()", null);
-								if(id != null)
-									property.SetValue(key, Zongsoft.Common.Convert.ConvertValue(id,property.PropertyType));
-							}
+							key.TrySet(info.PropertyNodeList.FirstOrDefault(p => p.Sequenced).Name, () => executer.ExecuteScalar("SELECT LAST_INSERT_ID()", null));
+
+							//var property = info.EntityType.GetProperty(info.PropertyNodeList.FirstOrDefault(p => p.Sequenced).Name);
+							//if(property != null)
+							//{
+							//	var id = executer.ExecuteScalar("SELECT LAST_INSERT_ID()", null);
+							//	if(id != null)
+							//		property.SetValue(key, Zongsoft.Common.Convert.ConvertValue(id, property.PropertyType));
+							//}
 						}
 					}
 				}
