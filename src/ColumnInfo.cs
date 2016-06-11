@@ -16,7 +16,8 @@ namespace Automao.Data
 		private PropertyNode _propertyNode;
 		private string _aggregateFunctionName;//聚合函数名称
 		private string _selectColumn;
-		private string _subAsName;
+		//private string _subAsName;
+		private ClassInfo _home;//当前列实际归属,主要是继承的情况
 		#endregion
 
 		#region 构造函数
@@ -106,8 +107,8 @@ namespace Automao.Data
 
 		public string GetColumnEx(string asName = null)
 		{
-			if(string.IsNullOrEmpty(asName) && (_classInfo != null || !string.IsNullOrEmpty(_subAsName)))
-				asName = string.IsNullOrEmpty(_subAsName) ? _classInfo.AsName : _subAsName;
+			if(string.IsNullOrEmpty(asName) && (_classInfo != null || _home != null))
+				asName = _home == null ? _classInfo.AsName : _home.AsName;
 
 			var field = PropertyNode != null ? _propertyNode.Column : _field;
 
@@ -172,7 +173,7 @@ namespace Automao.Data
 					var property = array[i];
 
 					var joinInfo = host.ClassNode.JoinList.FirstOrDefault(p => p.Name.Equals(property, System.StringComparison.OrdinalIgnoreCase));
-					if(joinInfo == null&&host.ClassNode.BaseClassNode!=null)
+					if(joinInfo == null && host.ClassNode.BaseClassNode != null)
 					{
 						joinInfo = FindProperty(host.ClassNode.BaseClassNode, property);
 						if(joinInfo != null)
@@ -194,7 +195,8 @@ namespace Automao.Data
 							parents.Reverse();
 							var last = AddJoin(joinDic, parent, host, parents[0].Name, parents, createClassInfo);
 							columnInfo._join = last;
-							columnInfo._subAsName = host.AsName;
+							//columnInfo._subAsName = host.AsName;
+							columnInfo._home = host;
 							columnInfo._classInfo = last.Target;
 						}
 
@@ -258,7 +260,7 @@ namespace Automao.Data
 			if(host.BaseClassNode == null)
 				return false;
 
-			if(IsParentProperty(host.BaseClassNode, floors+1, property, out parents))
+			if(IsParentProperty(host.BaseClassNode, floors + 1, property, out parents))
 			{
 				if(parents == null)
 					parents = new List<JoinPropertyNode>();
