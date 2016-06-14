@@ -689,6 +689,8 @@ namespace Automao.Data
 				Dictionary<PropertyNode, object> pks;
 				var dic = GetColumnFromEntity(info, item, members, out pks);
 
+				var tempValueIndex = valueIndex;
+
 				if(condition == null)//condition为空则跟据主键修改
 				{
 					if(pks == null || pks.Count == 0)
@@ -700,13 +702,14 @@ namespace Automao.Data
 					var columnInfos = CreateColumnInfo(pks.Select(p => p.Key.Name), classInfo);
 					classInfo.SetJoinIndex(0);
 
-					wheresql = newCondition.ToWhere(columnInfos, ref tableIndex, ref joinStartIndex, ref valueIndex, out whereValues);
+					wheresql = newCondition.ToWhere(columnInfos, ref tableIndex, ref joinStartIndex, ref tempValueIndex, out whereValues);
 				}
 
+
 				var temp = dic.Where(p => p.Value != null && !(p.Value is System.Linq.Expressions.Expression));
-				var list = temp.Select((p, i) => string.Format(setFormat, CreateColumnInfo(p.Key.Column).ToColumn(), i + valueIndex)).ToList();
-				var paramers = CreateParameters(0, whereValues).Concat(temp.Select((p, i) => CreateParameter(i + valueIndex, p.Value))).ToList();
-				valueIndex += list.Count;
+				var list = temp.Select((p, i) => string.Format(setFormat, CreateColumnInfo(p.Key.Column).ToColumn(), i + tempValueIndex)).ToList();
+				var paramers = CreateParameters(0, whereValues).Concat(temp.Select((p, i) => CreateParameter(i + tempValueIndex, p.Value))).ToList();
+				tempValueIndex += list.Count;
 
 				var expressionValues = dic.Where(p =>
 				{
@@ -724,7 +727,7 @@ namespace Automao.Data
 					return string.Format(addToSetFormat, CreateColumnInfo(p.Key.Column).ToColumn(), CreateColumnInfo(tempPropertyNode.Column).ToColumn(), p.Value.NodeType.ToSQL(), i + valueIndex);
 				}));
 
-				paramers.AddRange(expressionValues.Select((p, i) => CreateParameter(i + valueIndex, ((ConstantExpression)p.Value.Right).Value)));
+				paramers.AddRange(expressionValues.Select((p, i) => CreateParameter(i + tempValueIndex, ((ConstantExpression)p.Value.Right).Value)));
 
 				list.AddRange(dic.Where(p => p.Value == null).Select(p => string.Format(setNullFormat, CreateColumnInfo(p.Key.Column).ToColumn())));
 
