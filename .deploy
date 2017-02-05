@@ -1,0 +1,4 @@
+./src/Automao.Data.plugin
+./src/Automao.Data.option
+./src/bin/$(Edition)/Automao.Data.*
+./src/bin/$(Edition)/MySql.Data.*
