@@ -59,18 +59,13 @@ namespace Automao.Data.Mapping
 		#endregion
 
 		#region 静态方法
-		public static MappingInfo Create(string[] paths, string mappingFileName)
+		public static MappingInfo Create()
 		{
 			var result = new MappingInfo();
 			result._classNodeList = new List<ClassNode>();
 			result._procedureNodeList = new List<ProcedureNode>();
 
-			if(paths == null || paths.Length == 0)
-				paths = new[] { AppDomain.CurrentDomain.BaseDirectory };
-			else
-				paths = paths.Select(p => ParsePath(p)).ToArray();
-
-			var contexts = GetMappingContext(paths, mappingFileName);
+			var contexts = GetMappingContext(Zongsoft.ComponentModel.ApplicationContextBase.Current.ApplicationDirectory);
 
 			Dictionary<string, string> dicJoin = new Dictionary<string, string>();
 			XElement xml;
@@ -117,50 +112,59 @@ namespace Automao.Data.Mapping
 			return result;
 		}
 
-		private static Dictionary<string, string> GetMappingContext(string[] paths, string mappingFileName)
+		private static IDictionary<string, string> GetMappingContext(string rootDirectory)
 		{
-			Console.WriteLine("[{0}]", string.Join("\r\n", paths));
+			if(string.IsNullOrWhiteSpace(rootDirectory))
+				throw new ArgumentNullException(nameof(rootDirectory));
 
+			var paths = Directory.GetFiles(rootDirectory, "*.mapping", SearchOption.AllDirectories);
 			var result = new Dictionary<string, string>();
+
 			foreach(var path in paths)
 			{
-				if(result.ContainsKey(path))
+				result.Add(path, File.ReadAllText(path));
+			}
+
+			return result;
+		}
+
+		[Obsolete]
+		private static Dictionary<string, string> GetMappingContext(string[] paths, string mappingFileName)
+		{
+			var result = new Dictionary<string, string>();
+
+			foreach(var path in paths)
+			{
+				if(string.IsNullOrWhiteSpace(path) || result.ContainsKey(path))
 					continue;
 
-				if(path.StartsWith("http://"))
+				var di = new DirectoryInfo(path);
+
+				if(di.Exists)
 				{
-					var wc = new System.Net.WebClient();
-					var buffer = wc.DownloadData(path);
-					var text = Encoding.UTF8.GetString(buffer);
-					result.Add(path, text);
+					var files = System.IO.Directory.GetFiles(path, mappingFileName + ".mapping", System.IO.SearchOption.AllDirectories);
+
+					var temp = GetMappingContext(files, mappingFileName);
+					foreach(var item in temp)
+					{
+						result.Add(item.Key, item.Value);
+					}
 				}
 				else
 				{
-					var di = new DirectoryInfo(path);
-					if(di.Exists)
-					{
-						var files = System.IO.Directory.GetFiles(path, mappingFileName + ".mapping", System.IO.SearchOption.AllDirectories);
+					var fi = new FileInfo(path);
 
-						var temp = GetMappingContext(files, mappingFileName);
-						foreach(var item in temp)
-						{
-							result.Add(item.Key, item.Value);
-						}
-					}
-					else
+					if(fi.Exists)
 					{
-						var fi = new FileInfo(path);
-						if(fi.Exists)
+						using(var sr = fi.OpenText())
 						{
-							using(var sr = fi.OpenText())
-							{
-								var text = sr.ReadToEnd();
-								result.Add(path, text);
-							}
+							var text = sr.ReadToEnd();
+							result.Add(path, text);
 						}
 					}
 				}
 			}
+
 			return result;
 		}
 

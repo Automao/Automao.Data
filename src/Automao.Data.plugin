@@ -1,10 +1,11 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
+
 <plugin name="Automao.Data"
 				title="Automao.Data Plugin"
 				author="Automao Network Co., Ltd."
 				version="1.0"
-				copyright="Automao @2012"
-				description="Created by: Xing Yu at 2015-05">
+				copyright="Copyright(C) Automao network Co., Ltd. 2015. All rights reserved."
+				description="Created by: XingYu in 2015-05">
 
 	<manifest>
 		<assemblies>
@@ -12,15 +13,7 @@
 		</assemblies>
 	</manifest>
 
-	<extension path="/Workspace/Services/Data">
-		<object name="Automao" type="Automao.Data.MySql.MySqlDataAccess,Automao.Data" Option="{opt:/Data/Automao}" />
-		<object name="Security" value="{path:../Automao}" />
-	</extension>
-
-	<!--选项设置-->
-	<extension path="/Workbench/Options">
-		<option name="Data" title="{res:Text.Data.Title}">
-			<option name="Automao" title="{res:Text.Data.Automao.Title}" provider="."/>
-		</option>
+	<extension path="/Workspace/Services">
+		<object name="DataAccess" type="Automao.Data.MySql.MySqlDataAccess, Automao.Data" connectionPath="/Data/ConnectionStrings['default']" />
 	</extension>
 </plugin>

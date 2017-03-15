@@ -35,7 +35,6 @@ using System.Linq.Expressions;
 using System.Reflection;
 
 using Automao.Data.Mapping;
-using Automao.Data.Options.Configuration;
 
 using Zongsoft.Data;
 using Zongsoft.Common;
@@ -65,7 +64,7 @@ namespace Automao.Data
 		#endregion
 
 		#region 属性
-		public GeneralOption Option
+		public string ConnectionPath
 		{
 			get;
 			set;
@@ -79,9 +78,11 @@ namespace Automao.Data
 				{
 					var temp = new MappingInfo();
 					System.Threading.Interlocked.CompareExchange(ref _mappingInfo, temp, null);
+
 					if(_mappingInfo == temp)
-						_mappingInfo = MappingInfo.Create(Option.Mappings.Select(p => ((Options.Configuration.Mapping)p).Path).ToArray(), Option.MappingFileName);
+						_mappingInfo = MappingInfo.Create();
 				}
+
 				return _mappingInfo;
 			}
 		}
@@ -94,8 +95,19 @@ namespace Automao.Data
 				{
 					_executer = SqlExecuter.Current;
 					_executer.DbProviderFactory = _providerFactory;
-					_executer.ConnectionString = Option.ConnectionString;
+
+					//获取连接字符串配置项
+					var config = Zongsoft.ComponentModel.ApplicationContextBase.Current.OptionManager.GetOptionObject(this.ConnectionPath);
+
+					if(config == null)
+						throw new InvalidOperationException($"Invalid '{this.ConnectionPath}' connection string configuration path.");
+
+					if(config is string)
+						_executer.ConnectionString = (string)config;
+					else if(config is Zongsoft.Options.Configuration.ConnectionStringElement)
+						_executer.ConnectionString = ((Zongsoft.Options.Configuration.ConnectionStringElement)config).Value;
 				}
+
 				return _executer;
 			}
 		}

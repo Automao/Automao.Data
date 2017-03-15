@@ -29,11 +29,8 @@ using System.Data;
 using System.Data.Common;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading;
 
 using Zongsoft.Transactions;
-using Automao.Data.Options.Configuration;
 
 namespace Automao.Data
 {
@@ -74,57 +71,61 @@ namespace Automao.Data
 
 		public string ConnectionString
 		{
+			get
+			{
+				return _connectionString;
+			}
 			set
 			{
+				if(string.IsNullOrWhiteSpace(value))
+					throw new ArgumentNullException();
+
 				_connectionString = value;
 			}
 		}
 
-		private DbConnection DbConnection
+		private DbConnection GetDbConnection()
 		{
-			get
+			var transaction = Transaction.Current;
+			if(transaction != null)
 			{
-				var transaction = Transaction.Current;
-				if(transaction != null)
+				var connection = transaction.Information.Parameters.ContainsKey(_connection_ArgumentsKey)
+					? transaction.Information.Parameters[_connection_ArgumentsKey] as DbConnection
+					: null;
+
+				if(connection == null)
 				{
-					var connection = transaction.Information.Parameters.ContainsKey(_connection_ArgumentsKey)
-						? transaction.Information.Parameters[_connection_ArgumentsKey] as DbConnection
-						: null;
-
-					if(connection == null)
-					{
-						//创建一个新的数据连接对象
-						connection = _dbProviderFactory.CreateConnection();
-						connection.ConnectionString = _connectionString;
-
-						var isolationLevel = Parse(transaction.IsolationLevel);
-						connection.Open();
-						var dbTransaction = connection.BeginTransaction(isolationLevel);
-
-						//设置当前事务的环境参数
-						transaction.Information.Parameters[_connection_ArgumentsKey] = connection;
-						transaction.Information.Parameters[_transaction_ArgumentsKey] = dbTransaction;
-
-						transaction.Enlist(this);
-					}
-					return connection;
-				}
-
-				if(_needKeepConnection)
-				{
-					if(_keepConnection == null)
-					{
-						_keepConnection = _dbProviderFactory.CreateConnection();
-						_keepConnection.ConnectionString = _connectionString;
-					}
-					return _keepConnection;
-				}
-				else
-				{
-					var connection = _dbProviderFactory.CreateConnection();
+					//创建一个新的数据连接对象
+					connection = _dbProviderFactory.CreateConnection();
 					connection.ConnectionString = _connectionString;
-					return connection;
+
+					var isolationLevel = Parse(transaction.IsolationLevel);
+					connection.Open();
+					var dbTransaction = connection.BeginTransaction(isolationLevel);
+
+					//设置当前事务的环境参数
+					transaction.Information.Parameters[_connection_ArgumentsKey] = connection;
+					transaction.Information.Parameters[_transaction_ArgumentsKey] = dbTransaction;
+
+					transaction.Enlist(this);
 				}
+				return connection;
+			}
+
+			if(_needKeepConnection)
+			{
+				if(_keepConnection == null)
+				{
+					_keepConnection = _dbProviderFactory.CreateConnection();
+					_keepConnection.ConnectionString = _connectionString;
+				}
+				return _keepConnection;
+			}
+			else
+			{
+				var connection = _dbProviderFactory.CreateConnection();
+				connection.ConnectionString = _connectionString;
+				return connection;
 			}
 		}
 
@@ -169,7 +170,7 @@ namespace Automao.Data
 			if(string.IsNullOrEmpty(sql))
 				throw new ArgumentNullException("formatSql");
 
-			var connection = DbConnection;
+			var connection = this.GetDbConnection();
 
 			using(var command = connection.CreateCommand())
 			{
@@ -225,7 +226,7 @@ namespace Automao.Data
 			if(string.IsNullOrEmpty(sql))
 				throw new ArgumentNullException("formatSql");
 
-			var connection = DbConnection;
+			var connection = this.GetDbConnection();
 
 			using(var command = connection.CreateCommand())
 			{
@@ -275,7 +276,7 @@ namespace Automao.Data
 			if(Transaction.Current != null && Transaction.Current.IsCompleted)
 				return -1;
 
-			var connection = DbConnection;
+			var connection = this.GetDbConnection();
 
 			using(var command = connection.CreateCommand())
 			{
@@ -361,7 +362,8 @@ namespace Automao.Data
 			if(transaction == null)
 				return;
 
-			var connection = DbConnection;
+			var connection = this.GetDbConnection();
+
 			switch(context.Phase)
 			{
 				case EnlistmentPhase.Commit:

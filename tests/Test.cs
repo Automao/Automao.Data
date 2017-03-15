@@ -14,16 +14,6 @@ namespace Automao.Data.Tests
 	{
 		private Automao.Data.MySql.MySqlDataAccess _db;
 
-		public Test()
-		{
-			_db = new Automao.Data.MySql.MySqlDataAccess();
-
-			_db.Option = new Options.Configuration.GeneralOption();
-			_db.Option.ConnectionString = "server=ip:port;user id=root;Password=******;database=db;persist security info=False";
-			_db.Option.Mappings = new Options.Configuration.Mappings();
-			_db.Option.MappingFileName = "test";
-		}
-
 		[Xunit.Fact(DisplayName = "select")]
 		public void TestSelect()
 		{
