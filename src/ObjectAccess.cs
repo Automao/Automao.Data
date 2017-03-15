@@ -96,11 +96,14 @@ namespace Automao.Data
 					_executer = SqlExecuter.Current;
 					_executer.DbProviderFactory = _providerFactory;
 
+					if(string.IsNullOrWhiteSpace(this.ConnectionPath))
+						throw new InvalidOperationException("Missing option path of connection string.");
+
 					//获取连接字符串配置项
-					var config = Zongsoft.ComponentModel.ApplicationContextBase.Current.OptionManager.GetOptionObject(this.ConnectionPath);
+					var config = Zongsoft.ComponentModel.ApplicationContextBase.Current.OptionManager.GetOptionValue(this.ConnectionPath);
 
 					if(config == null)
-						throw new InvalidOperationException($"Invalid '{this.ConnectionPath}' connection string configuration path.");
+						throw new InvalidOperationException($"Not found connection string by '{this.ConnectionPath}' option path.");
 
 					if(config is string)
 						_executer.ConnectionString = (string)config;

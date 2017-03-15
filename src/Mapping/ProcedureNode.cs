@@ -10,7 +10,6 @@ namespace Automao.Data.Mapping
 	public class ProcedureNode
 	{
 		#region 字段
-		private System.Type _entityType;
 		private string _name;
 		private string _procedure;
 		private string _schema;
