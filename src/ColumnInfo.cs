@@ -83,7 +83,7 @@ namespace Automao.Data
 			if(!string.IsNullOrEmpty(asName))
 				asName += ".";
 
-			var field = PropertyNode != null ? _propertyNode.Column : _field;
+			var field = PropertyNode != null ? _propertyNode.Field : _field;
 
 			if(field == "0" || field.Equals("count(0)", System.StringComparison.OrdinalIgnoreCase))
 				return field.ToUpper();
@@ -110,7 +110,7 @@ namespace Automao.Data
 			if(string.IsNullOrEmpty(asName) && (_classInfo != null || _home != null))
 				asName = _home == null ? _classInfo.AsName : _home.AsName;
 
-			var field = PropertyNode != null ? _propertyNode.Column : _field;
+			var field = PropertyNode != null ? _propertyNode.Field : _field;
 
 			if(field == "0")
 				return string.Format("{0}_0", asName);

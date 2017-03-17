@@ -15,11 +15,11 @@ namespace Automao.Data.Mapping
 	{
 		#region 字段
 		private string _name;
-		private string _column;
+		private string _field;
 		private bool _isKey;
-		private bool _unColumn;
+		private bool _ignored;
 		private bool _passedIntoConstructor;
-		private string _constructorName;
+		private string _parameterName;
 		private bool _sequenced;
 		#endregion
 
@@ -58,26 +58,27 @@ namespace Automao.Data.Mapping
 		}
 
 		/// <summary>
-		/// 不是一个列
+		/// 忽略映射
 		/// </summary>
-		public bool UnColumn
+		public bool Ignored
 		{
 			get
 			{
-				return _unColumn;
+				return _ignored;
 			}
 		}
 
 		/// <summary>
 		/// 表中列名
 		/// </summary>
-		public string Column
+		public string Field
 		{
 			get
 			{
-				if(string.IsNullOrEmpty(_column))
-					_column = Name;
-				return _column;
+				if(string.IsNullOrEmpty(_field))
+					_field = Name;
+
+				return _field;
 			}
 		}
 
@@ -95,11 +96,11 @@ namespace Automao.Data.Mapping
 		/// <summary>
 		/// 构造函数对应参数名称
 		/// </summary>
-		public string ConstructorName
+		public string ParameterName
 		{
 			get
 			{
-				return _constructorName;
+				return _parameterName;
 			}
 		}
 
@@ -121,18 +122,18 @@ namespace Automao.Data.Mapping
 
 			var propertyInfo = new PropertyNode(propertyInfoName);
 
-			if(MappingInfo.GetAttribuleValue(property, "constructorName", out attribuleValue))
+			if(MappingInfo.GetAttribuleValue(property, "constructor.parameter", out attribuleValue))
 			{
-				propertyInfo._constructorName = attribuleValue;
+				propertyInfo._parameterName = attribuleValue;
 				propertyInfo._passedIntoConstructor = true;
 			}
 
-			if(property.Attribute("column") == null)
-				propertyInfo._column = propertyInfo.Name;
-			else if(MappingInfo.GetAttribuleValue(property, "column", out attribuleValue))
-				propertyInfo._column = attribuleValue;
+			if(property.Attribute("field") == null)
+				propertyInfo._field = propertyInfo.Name;
+			else if(MappingInfo.GetAttribuleValue(property, "field", out attribuleValue))
+				propertyInfo._field = attribuleValue;
 			else
-				propertyInfo._unColumn = true;
+				propertyInfo._ignored = true;
 
 			if(MappingInfo.GetAttribuleValue(property, "sequenced", out attribuleValue))
 				propertyInfo._sequenced = true;

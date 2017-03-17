@@ -131,7 +131,7 @@ namespace Automao.Data
 
 			var info = MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 			if(info == null)
-				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
+				throw new Exception($"未找到 '{name}' 对应的数据映射。");
 
 			return info.PropertyNodeList.Where(p => p.IsKey).Select(p => p.Name).ToArray();
 		}
@@ -207,7 +207,7 @@ namespace Automao.Data
 			{
 				var columnInfo = p;
 				if(columnInfo.PropertyNode != null)
-					return !columnInfo.PropertyNode.UnColumn;//排除列名为空的字段
+					return !columnInfo.PropertyNode.Ignored;//排除列名为空的字段
 				return !columnInfo.ClassInfo.ClassNode.JoinList.Any(pp => pp.Name == columnInfo.Field);//排除导航属性
 			});
 
@@ -290,7 +290,7 @@ namespace Automao.Data
 					if(groupColumnInfo.Any())
 					{
 						var temp = groupColumnInfo.ToDictionary(gc => gc.Field, gc => gc);
-						var dic = p.JoinInfo.Member.ToDictionary(c => temp[c.Key.Name].GetColumnEx(), c => c.Key.Column);
+						var dic = p.JoinInfo.Member.ToDictionary(c => temp[c.Key.Name].GetColumnEx(), c => c.Key.Field);
 
 						return Join.CreatJoinSql(p, dic, CreateColumnInfo);
 					}
@@ -620,7 +620,7 @@ namespace Automao.Data
 				var dic = GetColumnFromEntity(info, item, null, out pks).Where(p => p.Value != null && includes.Contains(p.Key.Name, StringComparer.OrdinalIgnoreCase)).ToDictionary(p => p.Key, p => p.Value);
 
 				var sql = string.Format(insertformat, tableName,
-					string.Join(",", dic.Keys.Select(p => string.Format(columnformat, CreateColumnInfo(p.Column).ToColumn()))),
+					string.Join(",", dic.Keys.Select(p => string.Format(columnformat, CreateColumnInfo(p.Field).ToColumn()))),
 					string.Join(",", dic.Select((p, i) => string.Format("{{{0}}}", i)))
 				);
 
@@ -722,7 +722,7 @@ namespace Automao.Data
 
 
 				var temp = dic.Where(p => p.Value != null && !(p.Value is System.Linq.Expressions.Expression));
-				var list = temp.Select((p, i) => string.Format(setFormat, CreateColumnInfo(p.Key.Column).ToColumn(), i + tempValueIndex)).ToList();
+				var list = temp.Select((p, i) => string.Format(setFormat, CreateColumnInfo(p.Key.Field).ToColumn(), i + tempValueIndex)).ToList();
 				var paramers = CreateParameters(0, whereValues).Concat(temp.Select((p, i) => CreateParameter(i + tempValueIndex, p.Value))).ToList();
 				tempValueIndex += list.Count;
 
@@ -739,12 +739,12 @@ namespace Automao.Data
 				{
 					var leftName = ((MemberExpression)p.Value.Left).Member.Name;
 					var tempPropertyNode = info.PropertyNodeList.FirstOrDefault(pp => pp.Name.Equals(leftName, StringComparison.OrdinalIgnoreCase)) ?? new PropertyNode(leftName);
-					return string.Format(addToSetFormat, CreateColumnInfo(p.Key.Column).ToColumn(), CreateColumnInfo(tempPropertyNode.Column).ToColumn(), p.Value.NodeType.ToSQL(), i + valueIndex);
+					return string.Format(addToSetFormat, CreateColumnInfo(p.Key.Field).ToColumn(), CreateColumnInfo(tempPropertyNode.Field).ToColumn(), p.Value.NodeType.ToSQL(), i + valueIndex);
 				}));
 
 				paramers.AddRange(expressionValues.Select((p, i) => CreateParameter(i + tempValueIndex, ((ConstantExpression)p.Value.Right).Value)));
 
-				list.AddRange(dic.Where(p => p.Value == null).Select(p => string.Format(setNullFormat, CreateColumnInfo(p.Key.Column).ToColumn())));
+				list.AddRange(dic.Where(p => p.Value == null).Select(p => string.Format(setNullFormat, CreateColumnInfo(p.Key.Field).ToColumn())));
 
 				var sql = string.Format(updateformat, tableName, string.Join(",", list), wheresql);
 
@@ -991,8 +991,8 @@ namespace Automao.Data
 				instanceArgs = new object[constructorPropertys.Count];
 				constructorPropertys.ForEach(p =>
 				{
-					var tempValue = propertyValues.FirstOrDefault(pp => pp.Key.Equals(p.Column, StringComparison.OrdinalIgnoreCase));
-					var args = cpinfo == null ? null : cpinfo.FirstOrDefault(pp => pp.Name.Equals(p.ConstructorName, StringComparison.OrdinalIgnoreCase));
+					var tempValue = propertyValues.FirstOrDefault(pp => pp.Key.Equals(p.Field, StringComparison.OrdinalIgnoreCase));
+					var args = cpinfo == null ? null : cpinfo.FirstOrDefault(pp => pp.Name.Equals(p.ParameterName, StringComparison.OrdinalIgnoreCase));
 					if(args != null)
 						instanceArgs[args.Position] = Zongsoft.Common.Convert.ConvertValue(tempValue.Value, args.ParameterType);
 				});
@@ -1040,10 +1040,10 @@ namespace Automao.Data
 				}
 
 				var propertyInfo = classNode == null ? null : classNode.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(property.Name, StringComparison.CurrentCultureIgnoreCase));
-				if(propertyInfo != null && string.IsNullOrEmpty(propertyInfo.Column))
+				if(propertyInfo != null && string.IsNullOrEmpty(propertyInfo.Field))
 					continue;
 
-				var tempValue = propertyValues.FirstOrDefault(p => p.Key.Equals(propertyInfo != null ? propertyInfo.Column : property.Name, StringComparison.OrdinalIgnoreCase));
+				var tempValue = propertyValues.FirstOrDefault(p => p.Key.Equals(propertyInfo != null ? propertyInfo.Field : property.Name, StringComparison.OrdinalIgnoreCase));
 				if(tempValue.Value == null || tempValue.Value is System.DBNull)
 					continue;
 
@@ -1071,7 +1071,7 @@ namespace Automao.Data
 						continue;
 
 					var propertyNo = classNode.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(key, StringComparison.OrdinalIgnoreCase)) ?? new PropertyNode(key);
-					if(propertyNo.UnColumn)
+					if(propertyNo.Ignored)
 						continue;
 
 					var value = dic[key];
@@ -1089,7 +1089,7 @@ namespace Automao.Data
 						continue;
 
 					var propertyNo = classNode.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(property.Name, StringComparison.OrdinalIgnoreCase)) ?? new PropertyNode(property.Name);
-					if(propertyNo.UnColumn)
+					if(propertyNo.Ignored)
 						continue;
 
 					object value = null;
@@ -1169,7 +1169,7 @@ namespace Automao.Data
 					var tempClassInfo = CreateClassInfo("TT", item.Target.ClassNode);
 					item.Parent.AddJoinWhere(string.Join(" AND ", item.JoinInfo.Member.Select(p =>
 					{
-						var where = string.Format(whereformat, CreateColumnInfo(p.Value.Column).ToColumn(tempClassInfo.AsName), CreateColumnInfo(p.Key.Column).ToColumn(item.Host.AsName));
+						var where = string.Format(whereformat, CreateColumnInfo(p.Value.Field).ToColumn(tempClassInfo.AsName), CreateColumnInfo(p.Key.Field).ToColumn(item.Host.AsName));
 						var subparameter = new CreateSelectSqlParameter(true);
 						subparameter.Info = tempClassInfo;
 						subparameter.Columns = new List<ColumnInfo>();

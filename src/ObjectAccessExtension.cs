@@ -200,7 +200,7 @@ namespace Automao.Data
 			return string.Join(",", sorting.Members.Select(p =>
 			{
 				var pi = info.PropertyNodeList.FirstOrDefault(i => i.Name == p);
-				return string.Format("{0}\"{1}\" {2}", tableEx, pi == null ? p : pi.Column, sort);
+				return string.Format("{0}\"{1}\" {2}", tableEx, pi == null ? p : pi.Field, sort);
 			}));
 		}
 

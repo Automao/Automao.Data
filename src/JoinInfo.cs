@@ -97,7 +97,7 @@ namespace Automao.Data
 
 		public static string CreatJoinSql(Join join, Func<string, ColumnInfo> createColumnInfo)
 		{
-			return CreatJoinSql(join, join.JoinInfo.Member.ToDictionary(jc => jc.Key.Column, jc => jc.Value.Column), createColumnInfo);
+			return CreatJoinSql(join, join.JoinInfo.Member.ToDictionary(jc => jc.Key.Field, jc => jc.Value.Field), createColumnInfo);
 		}
 
 		public static string CreatJoinSql(Join join, Dictionary<string, string> relation, Func<string, ColumnInfo> createColumnInfo)
