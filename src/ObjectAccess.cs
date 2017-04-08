@@ -988,6 +988,10 @@ namespace Automao.Data
 					properties = dicValue.Value;
 				}
 
+				//如果构造函数需要参数，但不能提供参数时返回null;
+				if(constructorPropertys.Count > 0 && (propertyValues == null || propertyValues.Count == 0 || propertyValues.All(p => p.Value == DBNull.Value)))
+					return null;
+
 				instanceArgs = new object[constructorPropertys.Count];
 				constructorPropertys.ForEach(p =>
 				{
@@ -1007,19 +1011,10 @@ namespace Automao.Data
 			if(instanceArgs == null || instanceArgs.Length == 0)
 				entity = Activator.CreateInstance(entityType);
 			else
-			{
-				try
-				{
-					entity = Activator.CreateInstance(entityType, instanceArgs);
-				}
-				catch
-				{
-					if(propertyValues.Count == 0 || propertyValues.All(p => p.Value == DBNull.Value))
-						return null;
-					else
-						throw;
-				}
-			}
+				entity = Activator.CreateInstance(entityType, instanceArgs);
+
+			if(propertyValues == null || propertyValues.Count == 0 || propertyValues.All(p => p.Value == DBNull.Value))
+				return entity;
 
 			foreach(var property in properties)
 			{
