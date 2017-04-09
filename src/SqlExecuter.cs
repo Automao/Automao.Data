@@ -200,10 +200,12 @@ namespace Automao.Data
 						while(reader.Read())
 						{
 							var dic = new Dictionary<string, object>();
+
 							for(int i = 0; i < reader.FieldCount; i++)
 							{
 								dic.Add(reader.GetName(i), reader[i]);
 							}
+
 							yield return dic;
 						}
 					}
@@ -254,6 +256,10 @@ namespace Automao.Data
 					var result = command.ExecuteScalar();
 					return result;
 				}
+				catch(global::MySql.Data.MySqlClient.MySqlException ex)
+				{
+					throw new Zongsoft.Data.DataAccessException("MySQL", ex.Number, ex);
+				}
 				finally
 				{
 					if(!startTransaction && !_needKeepConnection)
@@ -303,6 +309,10 @@ namespace Automao.Data
 
 					return command.ExecuteNonQuery();
 				}
+				catch(global::MySql.Data.MySqlClient.MySqlException ex)
+				{
+					throw new Zongsoft.Data.DataAccessException("MySQL", ex.Number, ex);
+				}
 				finally
 				{
 					if(!startTransaction && !_needKeepConnection)
@@ -334,11 +344,21 @@ namespace Automao.Data
 				command.CommandType = CommandType.StoredProcedure;
 
 				command.Parameters.AddRange(parameters);
+				var adapter = _dbProviderFactory.CreateDataAdapter();
 
-				using(var adapter = _dbProviderFactory.CreateDataAdapter())
+				try
 				{
 					adapter.SelectCommand = command;
 					adapter.Fill(table);
+				}
+				catch(global::MySql.Data.MySqlClient.MySqlException ex)
+				{
+					throw new Zongsoft.Data.DataAccessException("MySQL", ex.Number, ex);
+				}
+				finally
+				{
+					if(adapter != null)
+						adapter.Dispose();
 				}
 
 				outParamers = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);

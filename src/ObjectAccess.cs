@@ -193,7 +193,17 @@ namespace Automao.Data
 				return CreateSelectSql(parameter);
 			}, p =>
 			{
-				var tablevalues = this.Executer.Select(p.Sql, this.CreateParameters(0, p.Values));
+				IEnumerable<Dictionary<string, object>> tablevalues;
+
+				try
+				{
+					tablevalues = this.Executer.Select(p.Sql, this.CreateParameters(0, p.Values));
+				}
+				catch(global::MySql.Data.MySqlClient.MySqlException ex)
+				{
+					throw new Zongsoft.Data.DataAccessException("MySQL", ex.Number, ex);
+				}
+
 				var result = this.SetEntityValue<T>(tablevalues, classInfo);
 				return result;
 			});
@@ -342,13 +352,21 @@ namespace Automao.Data
 					countSql = CreateSelectSql(subparameter);
 				}
 
-				var tablevalues = this.Executer.Select(countSql, CreateParameters(0, values));
+				IEnumerable<Dictionary<string, object>> tablevalues;
+
+				try
+				{
+					tablevalues = this.Executer.Select(countSql, CreateParameters(0, values));
+				}
+				catch(global::MySql.Data.MySqlClient.MySqlException ex)
+				{
+					throw new Zongsoft.Data.DataAccessException("MySQL", ex.Number, ex);
+				}
 
 				if(tablevalues != null)
 				{
 					var item = tablevalues.FirstOrDefault();
 					parameter.Paging.TotalCount = Zongsoft.Common.Convert.ConvertValue<int>(item.Values.First());
-
 				}
 			}
 
@@ -614,7 +632,7 @@ namespace Automao.Data
 				if(item == null)
 					continue;
 
-				string[] includes = this.ResolveScope(name, scope, item.Data.GetType());
+				string[] includes = this.ResolveScope(name, scope, item);
 
 				Dictionary<PropertyNode, object> pks;
 				var dic = GetColumnFromEntity(info, item, null, out pks).Where(p => p.Value != null && includes.Contains(p.Key.Name, StringComparer.OrdinalIgnoreCase)).ToDictionary(p => p.Key, p => p.Value);
@@ -696,7 +714,7 @@ namespace Automao.Data
 				if(item == null)
 					continue;
 
-				string[] members = this.ResolveScope(name, scope, item.Data.GetType());
+				string[] members = this.ResolveScope(name, scope, item);
 
 				if(members == null || members.Length == 0)
 					throw new ArgumentNullException("members");
@@ -1009,9 +1027,9 @@ namespace Automao.Data
 			object entity;
 
 			if(instanceArgs == null || instanceArgs.Length == 0)
-				entity = Activator.CreateInstance(entityType);
+				entity = System.Activator.CreateInstance(entityType);
 			else
-				entity = Activator.CreateInstance(entityType, instanceArgs);
+				entity = System.Activator.CreateInstance(entityType, instanceArgs);
 
 			if(propertyValues == null || propertyValues.Count == 0 || propertyValues.All(p => p.Value == DBNull.Value))
 				return entity;
@@ -1200,17 +1218,37 @@ namespace Automao.Data
 				entityType = this.GetEntityType(entityName);
 
 			var entityDescriptor = _entityCache.GetOrAdd(entityType, type => new EntityDesciptior(this, entityName, type));
-			return this.ResolveScope(entityDescriptor, scope, isWeakType).ToArray();
+			return this.ResolveScope(null, entityDescriptor, scope, isWeakType).ToArray();
 		}
 
-		private HashSet<string> ResolveScope(EntityDesciptior entity, string scope, bool isWeakType)
+		private string[] ResolveScope(string entityName, string scope, DataDictionary data)
 		{
-			var result = new HashSet<string>(entity.Properties.Where(p => p.IsScalarType).Select(p => p.PropertyName), StringComparer.OrdinalIgnoreCase);
+			if(string.IsNullOrWhiteSpace(entityName))
+				throw new ArgumentNullException("entityName");
+
+			var entityType = data.Data.GetType();
+			var isWeakType = typeof(IDictionary).IsAssignableFrom(entityType) || Zongsoft.Common.TypeExtension.IsAssignableFrom(typeof(IDictionary<,>), entityType);
+
+			if(entityType == null || isWeakType)
+				entityType = this.GetEntityType(entityName);
+
+			var entityDescriptor = _entityCache.GetOrAdd(entityType, type => new EntityDesciptior(this, entityName, type));
+			return this.ResolveScope(data, entityDescriptor, scope, isWeakType).ToArray();
+		}
+
+		private HashSet<string> ResolveScope(DataDictionary data, EntityDesciptior entity, string scope, bool isWeakType)
+		{
+			HashSet<string> result;
+
+			if(data == null)
+				result = new HashSet<string>(entity.Properties.Where(p => p.IsScalarType).Select(p => p.PropertyName), StringComparer.OrdinalIgnoreCase);
+			else
+				result = new HashSet<string>(data.GetEntries().Select(p => p.Key));
 
 			if(string.IsNullOrWhiteSpace(scope))
 				return result;
 
-			var members = scope.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+			var members = scope.Split(',', ';');
 
 			for(int i = 0; i < members.Length; i++)
 			{
