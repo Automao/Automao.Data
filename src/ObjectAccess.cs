@@ -144,9 +144,9 @@ namespace Automao.Data
 			if(string.IsNullOrEmpty(name))
 				name = typeof(T).Name;
 
-			var classNode = MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+			var classNode = MappingInfo.ClassNodeList?.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 			if(classNode == null)
-				throw new Exception(string.Format("未找到{0}对应的mapping节点", name));
+				throw new DataException(string.Format("未找到{0}对应的mapping节点", name));
 
 			var classInfo = CreateClassInfo("T", classNode);
 
@@ -1243,7 +1243,7 @@ namespace Automao.Data
 			if(data == null)
 				result = new HashSet<string>(entity.Properties.Where(p => p.IsScalarType).Select(p => p.PropertyName), StringComparer.OrdinalIgnoreCase);
 			else
-				result = new HashSet<string>(data.GetEntries().Select(p => p.Key));
+				result = new HashSet<string>(data.Where(p => p.Value == null || this.IsScalarType(p.Value.GetType())).Select(p => p.Key), StringComparer.OrdinalIgnoreCase);
 
 			if(string.IsNullOrWhiteSpace(scope))
 				return result;
