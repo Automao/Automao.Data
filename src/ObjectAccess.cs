@@ -964,7 +964,7 @@ namespace Automao.Data
 					var propertyValue = CreateEntity(property.PropertyType, dic, item.Target.ClassNode);
 
 					if(propertyValue == null)
-						return false;
+						continue;
 
 					var flag = dic == null || dic.Count == 0 || dic.All(p => p.Value is System.DBNull);
 
