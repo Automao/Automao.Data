@@ -144,11 +144,12 @@ namespace Automao.Data.Mapping
 		#endregion
 
 		#region 公共方法
-		public string GetTableName(bool caseSensitive)
+		public string GetTableName()
 		{
-			var schema = string.IsNullOrEmpty(_schema) ? "" : (_schema + ".");
-			var tableName = string.Format(caseSensitive ? "{0}\"{1}\"" : "{0}{1}", schema, _table);
-			return tableName;
+			if(string.IsNullOrWhiteSpace(_schema))
+				return string.Format("`{0}`", _table);
+			else
+				return string.Format("`{0}`.`{1}`", _schema, _table);
 		}
 
 		///// <summary>

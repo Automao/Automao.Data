@@ -16,7 +16,7 @@ namespace Automao.Data.MySql
 
 		protected override string GetTableName(ClassNode classNode, string asName)
 		{
-			return string.Format("{0} {1}", classNode.GetTableName(false), asName);
+			return string.Format("{0} {1}", classNode.GetTableName(), asName);
 		}
 	}
 }
