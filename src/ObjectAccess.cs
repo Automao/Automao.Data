@@ -784,7 +784,7 @@ namespace Automao.Data
 		#endregion
 
 		#region 是否存在
-		public override bool Exists(string name, ICondition condition)
+		protected override bool OnExists(string name, ICondition condition)
 		{
 			if(string.IsNullOrEmpty(name))
 				throw new ArgumentNullException("name");
@@ -827,7 +827,7 @@ namespace Automao.Data
 		}
 		#endregion
 
-		public override long Increment(string name, string member, ICondition condition, int interval = 1)
+		protected override long OnIncrement(string name, string member, ICondition condition, int interval = 1)
 		{
 			if(string.IsNullOrWhiteSpace(name))
 				throw new ArgumentNullException("name");

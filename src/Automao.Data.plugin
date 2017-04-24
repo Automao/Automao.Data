@@ -13,7 +13,13 @@
 		</assemblies>
 	</manifest>
 
+	<extension path="/Workspace/Data">
+		<object name="DataAccess" type="Automao.Data.MySql.MySqlDataAccess, Automao.Data" connectionPath="/Data/ConnectionStrings['default']">
+			<object name="Filters" value="{path:../@Filters}" />
+		</object>
+	</extension>
+
 	<extension path="/Workspace/Services">
-		<object name="DataAccess" type="Automao.Data.MySql.MySqlDataAccess, Automao.Data" connectionPath="/Data/ConnectionStrings['default']" />
+		<object name="DataAccess" value="{path:/Workspace/Data/DataAccess}" />
 	</extension>
 </plugin>
