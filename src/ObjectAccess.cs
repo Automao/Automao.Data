@@ -523,15 +523,15 @@ namespace Automao.Data
 				throw new Exception(string.Join("未找到{0}对应的Mapping", name));
 
 			Dictionary<string, object> dic;
-			var paramers = inParameters.Where(p => p.Value != null).Select((p, i) =>
+			var paramers = inParameters.Select((entry, i) =>
 			{
-				var parameterName = p.Key;
+				var parameterName = entry.Key;
 				var dbType = "";
 				bool isInOutPut = false;
 				int? size = null;
 				if(procedureInfo != null)
 				{
-					var item = procedureInfo.ParameterList.FirstOrDefault(pp => pp.Name.Equals(p.Key, StringComparison.CurrentCultureIgnoreCase));
+					var item = procedureInfo.ParameterList.FirstOrDefault(pp => pp.Name.Equals(entry.Key, StringComparison.CurrentCultureIgnoreCase));
 					if(item != null)
 					{
 						parameterName = item.Name;
@@ -540,7 +540,7 @@ namespace Automao.Data
 						size = item.Size;
 					}
 				}
-				return CreateParameter(i, p.Value, dbType, parameterName, false, isInOutPut, size, true);
+				return CreateParameter(i, entry.Value ?? DBNull.Value, dbType, parameterName, false, isInOutPut, size, true);
 			}).ToList();
 
 			paramers.AddRange(procedureInfo.ParameterList.Where(p => !inParameters.ContainsKey(p.Name)).Select((p, i) => CreateParameter(paramers.Count + i, null, p.DbType, p.Name, p.IsOutPut, false, p.Size, true)).ToArray());
