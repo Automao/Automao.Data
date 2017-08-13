@@ -201,7 +201,7 @@ namespace Automao.Data
 				}
 				catch(global::MySql.Data.MySqlClient.MySqlException ex)
 				{
-					throw new Zongsoft.Data.DataAccessException("MySQL", ex.Number, ex);
+					throw ExceptionUtility.GetDataException(ex);
 				}
 
 				var result = this.SetEntityValue<T>(tablevalues, classInfo);
@@ -360,7 +360,7 @@ namespace Automao.Data
 				}
 				catch(global::MySql.Data.MySqlClient.MySqlException ex)
 				{
-					throw new Zongsoft.Data.DataAccessException("MySQL", ex.Number, ex);
+					throw ExceptionUtility.GetDataException(ex);
 				}
 
 				if(tablevalues != null)
