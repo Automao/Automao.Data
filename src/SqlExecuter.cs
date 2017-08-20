@@ -34,41 +34,36 @@ using Zongsoft.Transactions;
 
 namespace Automao.Data
 {
-	internal class SqlExecuter : IEnlistment, IDisposable
+	internal class SqlExecuter : IEnlistment
 	{
-		#region 字段
-		private const string _connection_ArgumentsKey = "DbConnection";
-		private const string _transaction_ArgumentsKey = "DbTransaction";
-		private static SqlExecuter _current = new SqlExecuter();
-		private System.Data.Common.DbProviderFactory _dbProviderFactory;
+		#region 常量定义
+		private const string SESSION_CONNECTION_KEY = "DbConnection";
+		private const string SESSION_TRANSACTION_KEY = "DbTransaction";
+		#endregion
+
+		#region 成员字段
+		private DbProviderFactory _dbProviderFactory;
 		private string _connectionString;
-		private System.Data.Common.DbConnection _keepConnection;
-		private bool _needKeepConnection;
 		#endregion
 
 		#region 构造函数
-		private SqlExecuter()
+		private SqlExecuter(DbProviderFactory provider)
 		{
+			_dbProviderFactory = provider;
 		}
 		#endregion
 
-		#region 属性
-		public static SqlExecuter Current
+		#region 静态方法
+		public static SqlExecuter GetInstance(DbProviderFactory provider)
 		{
-			get
-			{
-				return _current;
-			}
-		}
+			if(provider == null)
+				throw new ArgumentNullException("provider");
 
-		public DbProviderFactory DbProviderFactory
-		{
-			set
-			{
-				_dbProviderFactory = value;
-			}
+			return new SqlExecuter(provider);
 		}
+		#endregion
 
+		#region 公共属性
 		public string ConnectionString
 		{
 			get
@@ -83,82 +78,9 @@ namespace Automao.Data
 				_connectionString = value;
 			}
 		}
-
-		private DbConnection GetDbConnection()
-		{
-			var transaction = Transaction.Current;
-			if(transaction != null)
-			{
-				var connection = transaction.Information.Parameters.ContainsKey(_connection_ArgumentsKey)
-					? transaction.Information.Parameters[_connection_ArgumentsKey] as DbConnection
-					: null;
-
-				if(connection == null)
-				{
-					//创建一个新的数据连接对象
-					connection = _dbProviderFactory.CreateConnection();
-					connection.ConnectionString = _connectionString;
-
-					var isolationLevel = Parse(transaction.IsolationLevel);
-					connection.Open();
-					var dbTransaction = connection.BeginTransaction(isolationLevel);
-
-					//设置当前事务的环境参数
-					transaction.Information.Parameters[_connection_ArgumentsKey] = connection;
-					transaction.Information.Parameters[_transaction_ArgumentsKey] = dbTransaction;
-
-					transaction.Enlist(this);
-				}
-				return connection;
-			}
-
-			if(_needKeepConnection)
-			{
-				if(_keepConnection == null)
-				{
-					_keepConnection = _dbProviderFactory.CreateConnection();
-					_keepConnection.ConnectionString = _connectionString;
-				}
-				return _keepConnection;
-			}
-			else
-			{
-				var connection = _dbProviderFactory.CreateConnection();
-				connection.ConnectionString = _connectionString;
-				return connection;
-			}
-		}
-
-		private DbTransaction DbTransaction
-		{
-			get
-			{
-				var transaction = Transaction.Current;
-				if(transaction != null)
-					return transaction.Information.Parameters[_transaction_ArgumentsKey] as DbTransaction;
-				return null;
-			}
-		}
 		#endregion
 
-		#region 公共方法
-		public SqlExecuter Keep()
-		{
-			var executer = new SqlExecuter();
-			executer._needKeepConnection = true;
-			executer._dbProviderFactory = _dbProviderFactory;
-			executer._connectionString = _connectionString;
-			return executer;
-		}
-
-		public void Dispose()
-		{
-			if(_keepConnection != null)
-				_keepConnection.Dispose();
-		}
-		#endregion
-
-		#region Execute
+		#region 执行方法
 		/// <summary>
 		/// 执行查找操作
 		/// </summary>
@@ -182,9 +104,8 @@ namespace Automao.Data
 				else
 					command.CommandText = sql;
 
-				var transaction = DbTransaction;
-				var startTransaction = transaction != null;
-				if(startTransaction && !Transaction.Current.IsCompleted)
+				var transaction = this.GetDbTransaction();
+				if(transaction != null)
 					command.Transaction = transaction;
 
 				if(connection.State == ConnectionState.Broken)
@@ -212,7 +133,7 @@ namespace Automao.Data
 				}
 				finally
 				{
-					if(!startTransaction && !_needKeepConnection)
+					if(transaction == null)
 						connection.Close();
 				}
 			}
@@ -240,9 +161,8 @@ namespace Automao.Data
 				else
 					command.CommandText = sql;
 
-				var transaction = DbTransaction;
-				var startTransaction = transaction != null;
-				if(startTransaction && !Transaction.Current.IsCompleted)
+				var transaction = this.GetDbTransaction();
+				if(transaction != null)
 					command.Transaction = transaction;
 
 				if(connection.State == ConnectionState.Broken)
@@ -262,7 +182,7 @@ namespace Automao.Data
 				}
 				finally
 				{
-					if(!startTransaction && !_needKeepConnection)
+					if(transaction == null)
 						connection.Close();
 				}
 			}
@@ -294,9 +214,8 @@ namespace Automao.Data
 				else
 					command.CommandText = sql;
 
-				var transaction = DbTransaction;
-				var startTransaction = transaction != null;
-				if(startTransaction)
+				var transaction = this.GetDbTransaction();
+				if(transaction != null)
 					command.Transaction = transaction;
 
 				if(connection.State == ConnectionState.Broken)
@@ -315,7 +234,7 @@ namespace Automao.Data
 				}
 				finally
 				{
-					if(!startTransaction && !_needKeepConnection)
+					if(transaction == null)
 						connection.Close();
 				}
 			}
@@ -375,91 +294,121 @@ namespace Automao.Data
 		}
 		#endregion
 
-		#region IEnlistment成员
+		#region 事务处理
 		public void OnEnlist(EnlistmentContext context)
 		{
-			var transaction = DbTransaction;
-			if(transaction == null)
-				return;
+			object value;
 
-			var connection = this.GetDbConnection();
-
-			switch(context.Phase)
+			if(context.Transaction.Information.Parameters.TryGetValue(SESSION_TRANSACTION_KEY, out value) && value != null && value is DbTransaction)
 			{
-				case EnlistmentPhase.Commit:
-					transaction.Commit();
-					if(connection != null)
-					{
-						connection.Close();
-						connection.Dispose();
-					}
-					break;
-				case EnlistmentPhase.Prepare:
-					break;
-				case EnlistmentPhase.Abort:
-				case EnlistmentPhase.Rollback:
-					transaction.Rollback();
-					if(connection != null)
-					{
-						connection.Close();
-						connection.Dispose();
-					}
-					break;
-				default:
-					break;
-			}
-		}
-		#endregion
+				var transaction = (DbTransaction)value;
+				var connection = transaction.Connection;
 
-		#region 静态方法
-		public static object ConvertValue(object value)
-		{
-			if(value == null)
-				return System.DBNull.Value;
-
-			Type type = value.GetType();
-
-			if(type.IsEnum)
-			{
-				var attris = type.GetCustomAttributes(typeof(System.ComponentModel.TypeConverterAttribute), false);
-				if(attris != null && attris.Length > 0)
+				switch(context.Phase)
 				{
-					var converter = (System.ComponentModel.TypeConverter)System.Activator.CreateInstance(Type.GetType(((System.ComponentModel.TypeConverterAttribute)attris[0]).ConverterTypeName));
-					if(converter.CanConvertTo(null))
-						return converter.ConvertTo(value, null);
+					case EnlistmentPhase.Prepare:
+						break;
+					case EnlistmentPhase.Commit:
+						transaction.Commit();
+						if(connection != null)
+						{
+							connection.Close();
+							connection.Dispose();
+						}
+						break;
+					case EnlistmentPhase.Abort:
+					case EnlistmentPhase.Rollback:
+						transaction.Rollback();
+						if(connection != null)
+						{
+							connection.Close();
+							connection.Dispose();
+						}
+						break;
+					default:
+						break;
 				}
-
-				return Convert.ChangeType(value, Enum.GetUnderlyingType(type));
 			}
-
-			if(type == typeof(Guid))
-				return ((Guid)value).ToByteArray();
-
-			if(type == typeof(Guid?))
-			{
-				var v = (Guid?)value;
-				if(v.HasValue)
-					return v.Value.ToByteArray();
-				else
-					return System.DBNull.Value;
-			}
-
-			if(type == typeof(bool))
-				return ((bool)value) ? 1 : 0;
-			if(type == typeof(bool?))
-			{
-				var v = (bool?)value;
-				if(v.HasValue)
-					return v.Value ? 1 : 0;
-				else
-					return System.DBNull.Value;
-			}
-
-			return value;
 		}
 		#endregion
 
-		private System.Data.IsolationLevel Parse(Zongsoft.Transactions.IsolationLevel level)
+		#region 私有方法
+		private Transaction GetRootTransaction()
+		{
+			var current = Transaction.Current;
+
+			if(current == null)
+				return null;
+
+			while(current.Information.Parent != null)
+			{
+				current = current.Information.Parent;
+			}
+
+			return current.IsCompleted ? null : current;
+		}
+
+		private DbConnection GetDbConnection()
+		{
+			var transaction = this.GetRootTransaction();
+
+			if(transaction != null)
+			{
+				//如果注册成功，则表示当前为首次对根事务进行注册
+				if(transaction.Enlist(this))
+				{
+					//创建一个新的数据连接对象
+					var connection = this.CreateConnection();
+
+					//将外部事物隔离级别转换成ADO.NET中的数据库事物隔离级别
+					var isolationLevel = ConvertIsolationLevel(transaction.IsolationLevel);
+
+					//打开数据连接
+					connection.Open();
+
+					//启动当前连接上的根数据事务
+					var dbTransaction = connection.BeginTransaction(isolationLevel);
+
+					//设置当前事务的环境参数
+					transaction.Information.Parameters[SESSION_CONNECTION_KEY] = connection;
+					transaction.Information.Parameters[SESSION_TRANSACTION_KEY] = dbTransaction;
+
+					return connection;
+				}
+				else
+				{
+					object value;
+
+					if(transaction.Information.Parameters.TryGetValue(SESSION_CONNECTION_KEY, out value) && value is DbConnection)
+						return (DbConnection)value;
+
+					throw new InvalidOperationException("Can not obtain DbConnection in the transaction context.");
+				}
+			}
+
+			//返回一个创建的新连接
+			return this.CreateConnection();
+		}
+
+		private DbTransaction GetDbTransaction()
+		{
+			var transaction = this.GetRootTransaction();
+			object value;
+
+			if(transaction != null && transaction.Information.Parameters.TryGetValue(SESSION_TRANSACTION_KEY, out value))
+				return value as DbTransaction;
+
+			return null;
+		}
+
+		private DbConnection CreateConnection()
+		{
+			var connection = _dbProviderFactory.CreateConnection();
+			connection.ConnectionString = _connectionString;
+			return connection;
+		}
+
+		private System.Data.IsolationLevel ConvertIsolationLevel(Zongsoft.Transactions.IsolationLevel level)
 		{
 			switch(level)
 			{
@@ -475,5 +424,6 @@ namespace Automao.Data
 					return System.Data.IsolationLevel.ReadCommitted;
 			}
 		}
+		#endregion
 	}
 }

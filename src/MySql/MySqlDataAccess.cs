@@ -41,8 +41,7 @@ namespace Automao.Data.MySql
 		#endregion
 
 		#region 构造函数
-		public MySqlDataAccess()
-			: base(MySqlClientFactory.Instance)
+		public MySqlDataAccess() : base(MySqlClientFactory.Instance)
 		{
 		}
 		#endregion
@@ -162,7 +161,7 @@ namespace Automao.Data.MySql
 					paramer.Value = value;
 				}
 				else
-					paramer.Value = SqlExecuter.ConvertValue(value);
+					paramer.Value = this.ConvertValue(value);
 			}
 			else if(!string.IsNullOrEmpty(dbType))
 			{
@@ -180,6 +179,52 @@ namespace Automao.Data.MySql
 			return paramer;
 		}
 		#endregion
+
+		internal object ConvertValue(object value)
+		{
+			if(value == null)
+				return System.DBNull.Value;
+
+			Type type = value.GetType();
+
+			if(type.IsEnum)
+			{
+				var attris = type.GetCustomAttributes(typeof(System.ComponentModel.TypeConverterAttribute), false);
+				if(attris != null && attris.Length > 0)
+				{
+					var converter = (System.ComponentModel.TypeConverter)System.Activator.CreateInstance(Type.GetType(((System.ComponentModel.TypeConverterAttribute)attris[0]).ConverterTypeName));
+					if(converter.CanConvertTo(null))
+						return converter.ConvertTo(value, null);
+				}
+
+				return Convert.ChangeType(value, Enum.GetUnderlyingType(type));
+			}
+
+			if(type == typeof(Guid))
+				return ((Guid)value).ToByteArray();
+
+			if(type == typeof(Guid?))
+			{
+				var v = (Guid?)value;
+				if(v.HasValue)
+					return v.Value.ToByteArray();
+				else
+					return System.DBNull.Value;
+			}
+
+			if(type == typeof(bool))
+				return ((bool)value) ? 1 : 0;
+			if(type == typeof(bool?))
+			{
+				var v = (bool?)value;
+				if(v.HasValue)
+					return v.Value ? 1 : 0;
+				else
+					return System.DBNull.Value;
+			}
+
+			return value;
+		}
 
 		protected override Dictionary<string, ColumnInfo> CreateColumnInfo(IEnumerable<string> columns, ClassInfo root)
 		{

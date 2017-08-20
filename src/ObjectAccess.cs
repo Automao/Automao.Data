@@ -89,12 +89,12 @@ namespace Automao.Data
 
 		internal SqlExecuter Executer
 		{
+			[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.Synchronized)]
 			get
 			{
 				if(_executer == null)
 				{
-					_executer = SqlExecuter.Current;
-					_executer.DbProviderFactory = _providerFactory;
+					_executer = SqlExecuter.GetInstance(_providerFactory);
 
 					if(string.IsNullOrWhiteSpace(this.ConnectionPath))
 						throw new InvalidOperationException("Missing option path of connection string.");
@@ -647,19 +647,20 @@ namespace Automao.Data
 				sqls.Add(item, new KeyValuePair<string, DbParameter[]>(sql, paramers));
 			}
 
-			using(var executer = Executer.Keep())
+			using(var transaction = new Zongsoft.Transactions.Transaction())
 			{
 				foreach(var key in sqls.Keys)
 				{
 					var item = sqls[key];
-					var count = executer.Execute(item.Key, item.Value);
+					var count = this.Executer.Execute(item.Key, item.Value);
+
 					if(count > 0)
 					{
 						insertCount++;
 
 						if(info.PropertyNodeList.Any(p => p.Sequenced))
 						{
-							key.TrySet(info.PropertyNodeList.FirstOrDefault(p => p.Sequenced).Name, () => executer.ExecuteScalar("SELECT LAST_INSERT_ID()", null));
+							key.TrySet(info.PropertyNodeList.FirstOrDefault(p => p.Sequenced).Name, () => this.Executer.ExecuteScalar("SELECT LAST_INSERT_ID()", null));
 
 							//var property = info.EntityType.GetProperty(info.PropertyNodeList.FirstOrDefault(p => p.Sequenced).Name);
 							//if(property != null)
@@ -671,6 +672,8 @@ namespace Automao.Data
 						}
 					}
 				}
+
+				transaction.Commit();
 			}
 
 			return insertCount;
@@ -771,12 +774,14 @@ namespace Automao.Data
 
 			var updateCount = 0;
 
-			using(var executer = Executer.Keep())
+			using(var transaction = new Zongsoft.Transactions.Transaction())
 			{
 				foreach(var sql in sqls)
 				{
-					updateCount += executer.Execute(sql.Key, sql.Value);
+					updateCount += this.Executer.Execute(sql.Key, sql.Value);
 				}
+
+				transaction.Commit();
 			}
 
 			return updateCount;
@@ -858,13 +863,15 @@ namespace Automao.Data
 			var sql = string.Format("UPDATE {0} SET {1}={1}+({2}) {3}",
 									tableName, columnInfo.ToColumn(), interval, wheresql);
 
-			using(var executer = Executer.Keep())
+			using(var transaction = new Zongsoft.Transactions.Transaction())
 			{
-				if(executer.Execute(sql, paramers) > 0)
+				if(this.Executer.Execute(sql, paramers) > 0)
 				{
 					sql = string.Format("SELECT {0} FROM {1} {2}", columnInfo.ToColumn(), tableName, wheresql);
-					return Zongsoft.Common.Convert.ConvertValue<long>(executer.ExecuteScalar(sql, paramers));
+					return Zongsoft.Common.Convert.ConvertValue<long>(this.Executer.ExecuteScalar(sql, paramers));
 				}
+
+				transaction.Commit();
 			}
 
 			return -1;
