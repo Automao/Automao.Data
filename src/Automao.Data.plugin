@@ -14,7 +14,7 @@
 	</manifest>
 
 	<extension path="/Workspace/Data">
-		<object name="DataAccess" type="Automao.Data.MySql.MySqlDataAccess, Automao.Data" connectionPath="/Data/ConnectionStrings['default']">
+		<object name="DataAccess" type="Automao.Data.MySql.MySqlDataAccess, Automao.Data" connectionPath="/Data/ConnectionStrings['localhost']">
 			<object name="Filters" value="{path:../@Filters}" />
 		</object>
 	</extension>
