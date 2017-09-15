@@ -52,7 +52,7 @@ namespace Automao.Data
 			switch(innerException.Number)
 			{
 				case ERROR_CODE_DUPLICATEKEY:
-					return new Zongsoft.Data.DataConflictException(MYSQL, innerException.Number, message);
+					return new Zongsoft.Data.DataConflictException(MYSQL, innerException.Number, message, innerException);
 			}
 
 			return new Zongsoft.Data.DataAccessException(MYSQL, innerException.Number, innerException);
