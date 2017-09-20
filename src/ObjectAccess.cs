@@ -940,7 +940,7 @@ namespace Automao.Data
 		/// <param name="entity"></param>
 		/// <param name="values"></param>
 		/// <returns>返回值表示是否成功创建导航属性</returns>
-		private bool SetNavigationProperty(ClassInfo classInfo, object entity, Dictionary<string, object> values)
+		private bool SetNavigationProperty(ClassInfo classInfo, object entity, IDictionary<string, object> values)
 		{
 			var success = false;
 			if(classInfo.Joins != null && classInfo.Joins.Count > 0)
@@ -986,7 +986,7 @@ namespace Automao.Data
 			return success;
 		}
 
-		protected object CreateEntity(Type entityType, Dictionary<string, object> propertyValues, ClassNode classNode)
+		protected object CreateEntity(Type entityType, IDictionary<string, object> propertyValues, ClassNode classNode)
 		{
 			if(entityType.IsDictionary())
 				return propertyValues;
@@ -1087,9 +1087,6 @@ namespace Automao.Data
 				var dic = (IDictionary<string, object>)entity;
 				foreach(var key in dic.Keys)
 				{
-					if(members != null && !members.Contains(key, StringComparer.OrdinalIgnoreCase))
-						continue;
-
 					var propertyNo = classNode.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(key, StringComparison.OrdinalIgnoreCase)) ?? new PropertyNode(key);
 					if(propertyNo.Ignored)
 						continue;
@@ -1097,6 +1094,10 @@ namespace Automao.Data
 					var value = dic[key];
 					if(propertyNo.IsKey)
 						pks.Add(propertyNo, value);
+
+					if(members != null && !members.Contains(key, StringComparer.OrdinalIgnoreCase))
+						continue;
+
 					properties.Add(propertyNo, value);
 				}
 			}
@@ -1105,9 +1106,6 @@ namespace Automao.Data
 				Type type = entity.GetType();
 				foreach(var property in type.GetProperties())
 				{
-					if(members != null && !members.Contains(property.Name, StringComparer.OrdinalIgnoreCase))
-						continue;
-
 					var propertyNo = classNode.PropertyNodeList.FirstOrDefault(p => p.Name.Equals(property.Name, StringComparison.OrdinalIgnoreCase)) ?? new PropertyNode(property.Name);
 					if(propertyNo.Ignored)
 						continue;
@@ -1117,14 +1115,12 @@ namespace Automao.Data
 					if(property.PropertyType.IsScalarType() || typeof(Expression).IsAssignableFrom(property.PropertyType))
 					{
 						value = property.GetValue(entity, null);
-						properties.Add(propertyNo, value);
-					}
 
-					if(propertyNo.IsKey)
-					{
-						if(value == null)
-							value = property.GetValue(entity, null);
-						pks.Add(propertyNo, value);
+						if(propertyNo.IsKey)
+							pks.Add(propertyNo, value);
+
+						if(members == null || members.Contains(property.Name, StringComparer.OrdinalIgnoreCase))
+							properties.Add(propertyNo, value);
 					}
 				}
 			}

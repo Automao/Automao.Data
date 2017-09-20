@@ -247,50 +247,59 @@ namespace Automao.Data
 		/// <param name="paramers">输入参数</param>
 		/// <param name="outParamers">输出参数</param>
 		/// <returns></returns>
-		public IEnumerable<Dictionary<string, object>> ExecuteProcedure(string procedureName, DbParameter[] parameters, out Dictionary<string, object> outParamers)
+		public IEnumerable<IDictionary<string, object>> ExecuteProcedure(string procedureName, DbParameter[] parameters, out Dictionary<string, object> outParamers)
 		{
 			if(string.IsNullOrEmpty(procedureName))
 				throw new ArgumentNullException("procedureName");
 
-			var table = new DataTable();
-
 			var connection = _dbProviderFactory.CreateConnection();
 			connection.ConnectionString = _connectionString;
 
-			using(var command = connection.CreateCommand())
+			var result = new List<Dictionary<string, object>>();
+
+			try
 			{
+				var command = connection.CreateCommand();
 				command.CommandText = procedureName;
 				command.CommandType = CommandType.StoredProcedure;
-
 				command.Parameters.AddRange(parameters);
-				var adapter = _dbProviderFactory.CreateDataAdapter();
 
-				try
-				{
-					adapter.SelectCommand = command;
-					adapter.Fill(table);
-				}
-				catch(global::MySql.Data.MySqlClient.MySqlException ex)
-				{
-					throw ExceptionUtility.GetDataException(ex);
-				}
-				finally
-				{
-					if(adapter != null)
-						adapter.Dispose();
-				}
+				//打开数据连接
+				connection.Open();
 
-				outParamers = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-				foreach(DbParameter item in command.Parameters)
+				using(var reader = command.ExecuteReader(CommandBehavior.CloseConnection))
 				{
-					if(item.Direction == ParameterDirection.Output || item.Direction == ParameterDirection.InputOutput)
-						outParamers.Add(item.ParameterName, item.Value);
+					outParamers = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+					foreach(DbParameter item in command.Parameters)
+					{
+						if(item.Direction == ParameterDirection.Output || item.Direction == ParameterDirection.InputOutput)
+							outParamers.Add(item.ParameterName, item.Value);
+					}
+
+					while(reader.Read())
+					{
+						var dic = new Dictionary<string, object>();
+
+						for(int i = 0; i < reader.FieldCount; i++)
+						{
+							dic[reader.GetName(i)] = reader.GetValue(i);
+						}
+
+						result.Add(dic);
+					}
 				}
 			}
+			catch(global::MySql.Data.MySqlClient.MySqlException ex)
+			{
+				throw ExceptionUtility.GetDataException(ex);
+			}
+			finally
+			{
+				if(connection != null)
+					connection.Dispose();
+			}
 
-			var columns = table.Columns.Cast<DataColumn>().ToList();
-
-			return table.Rows.Cast<DataRow>().Select(r => columns.ToDictionary(c => c.ColumnName, c => r[c])).ToArray();
+			return result;
 		}
 		#endregion
 
