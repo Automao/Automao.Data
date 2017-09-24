@@ -48,8 +48,7 @@ namespace Automao.Data
 		#endregion
 
 		#region 构造函数
-		public ObjectAccessResult(CreateSql createSql, Execute<T> execute)
-			: base(createSql)
+		public ObjectAccessResult(CreateSql createSql, Execute<T> execute) : base(createSql)
 		{
 			_getResult = execute;
 		}

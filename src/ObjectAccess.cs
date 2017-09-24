@@ -1,8 +1,9 @@
 ﻿/*
  * Authors:
  *   喻星(Xing Yu) <491718907@qq.com>
+ *   钟峰(Popeye Zhong) <9555843@qq.com>
  *
- * Copyright (C) 2015 Automao Network Co., Ltd. <http://www.zongsoft.com>
+ * Copyright (C) 2015-2017 Automao Network Co., Ltd. <http://www.zongsoft.com>
  *
  * This file is part of Automao.Data.
  *
@@ -137,12 +138,19 @@ namespace Automao.Data
 		}
 
 		#region 查询
-		protected override IEnumerable<T> OnSelect<T>(string name, ICondition condition, Grouping grouping, string scope, Paging paging, Sorting[] sorting)
+		protected override void OnSelect<T>(DataSelectionContext context)
 		{
-			var members = this.ResolveScope(name, scope, typeof(T));
+			var name = context.Name;
+			var condition = context.Condition;
+			var grouping = context.Grouping;
+			var scope = context.Scope;
+			var paging = context.Paging;
+			var sorting = context.Sortings;
+
+			var members = this.ResolveScope(name, scope, context.EntityType);
 
 			if(string.IsNullOrEmpty(name))
-				name = typeof(T).Name;
+				name = context.EntityType.Name;
 
 			var classNode = MappingInfo.ClassNodeList?.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 			if(classNode == null)
@@ -175,7 +183,7 @@ namespace Automao.Data
 			allColumns = allColumns.Concat(members);
 			allColumnInfos = CreateColumnInfo(allColumns, classInfo);
 
-			return new ObjectAccessResult<T>(p =>
+			context.Result = new ObjectAccessResult<T>(p =>
 			{
 				classInfo.SetIndex(p.TableIndex++);
 				p.JoinStartIndex = classInfo.SetJoinIndex(p.JoinStartIndex);
@@ -423,13 +431,14 @@ namespace Automao.Data
 		#endregion
 
 		#region Count
-		protected override int OnCount(string name, ICondition condition, string[] includes)
+		protected override void OnCount(DataCountContext context)
 		{
-			if(string.IsNullOrEmpty(name))
-				throw new ArgumentNullException("name");
+			var name = context.Name;
+			var condition = context.Condition;
+			string[] includes = new string[0];
 
-			if(includes == null)
-				includes = new string[0];
+			if(context.Includes != null && context.Includes.Length > 0)
+				includes = context.Includes.Split(',', ';');
 
 			var info = this.MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.CurrentCultureIgnoreCase));
 			if(info == null)
@@ -474,13 +483,17 @@ namespace Automao.Data
 			var sql = string.Format("SELECT {0} FROM {1} {2} {3}", countSql, classInfo.GetTableName(), joinsql, whereSql);
 
 			var result = Executer.ExecuteScalar(sql, CreateParameters(0, values));
-			return int.Parse(result.ToString());
+			context.Result = int.Parse(result.ToString());
 		}
 		#endregion
 
 		#region 删除
-		protected override int OnDelete(string name, ICondition condition, string[] cascades)
+		protected override void OnDelete(DataDeletionContext context)
 		{
+			var name = context.Name;
+			var condition = context.Condition;
+			var cascades = context.Cascades;
+
 			if(cascades != null && cascades.Length > 0)
 				throw new NotSupportedException();
 
@@ -503,13 +516,16 @@ namespace Automao.Data
 			var whereSql = condition.ToWhere(columnInfos, ref tableIndex, ref joinStartIndex, ref valueIndex, out values);
 
 			var sql = string.Format("DELETE FROM {0} {1}", CreateClassInfo("", info).GetTableName(), whereSql);
-			return Executer.Execute(sql, CreateParameters(0, values));
+			context.Count = Executer.Execute(sql, CreateParameters(0, values));
 		}
 		#endregion
 
 		#region 执行
-		protected override IEnumerable<T> OnExecute<T>(string name, IDictionary<string, object> inParameters, out IDictionary<string, object> outParameters)
+		protected override void OnExecute<T>(DataExecutionContext context)
 		{
+			var name = context.Name;
+			var inParameters = context.InParameters;
+
 			ClassNode classInfo = null;
 			var procedureInfo = this.MappingInfo.ProcedureNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 			if(procedureInfo == null)
@@ -548,13 +564,15 @@ namespace Automao.Data
 			var procedureName = GetProcedureName(procedureInfo);
 			var tablevalues = Executer.ExecuteProcedure(procedureName, paramers.ToArray(), out dic);
 
-			outParameters = dic.ToDictionary(p => p.Key, p => p.Value);
-
-			return tablevalues.Select(p => (T)CreateEntity(typeof(T), p, null));
+			context.OutParameters = dic.ToDictionary(p => p.Key, p => p.Value);
+			context.Result = tablevalues.Select(p => (T)CreateEntity(typeof(T), p, null));
 		}
 
-		protected override object OnExecuteScalar(string name, IDictionary<string, object> inParameters, out IDictionary<string, object> outParameters)
+		protected override void OnExecuteScalar(DataExecutionContext context)
 		{
+			var name = context.Name;
+			var inParameters = context.InParameters;
+
 			ClassNode classInfo = null;
 			var procedureInfo = this.MappingInfo.ProcedureNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 			if(procedureInfo == null)
@@ -593,29 +611,34 @@ namespace Automao.Data
 			var procedureName = GetProcedureName(procedureInfo);
 			var tablevalues = Executer.ExecuteProcedure(procedureName, paramers.ToArray(), out dic);
 
-			outParameters = dic.ToDictionary(p => p.Key, p => p.Value);
+			context.OutParameters = dic.ToDictionary(p => p.Key, p => p.Value);
 
 			if(classInfo != null)
-				return tablevalues.Select(p => CreateEntity(classInfo.EntityType, p, classInfo));
+				context.Result = tablevalues.Select(p => CreateEntity(classInfo.EntityType, p, classInfo));
 			else
 			{
 				var item = tablevalues.FirstOrDefault();
-				if(item == null || item.Count == 0)
-					return item;
 
-				return item[item.Keys.FirstOrDefault()];
+				if(item == null || item.Count == 0)
+					context.Result = item;
+				else
+					context.Result = item[item.Keys.FirstOrDefault()];
 			}
 		}
 		#endregion
 
 		#region 新增
-		protected override int OnInsertMany(string name, IEnumerable<DataDictionary> items, string scope)
+		protected override void OnInsert(DataInsertionContext context)
 		{
-			if(string.IsNullOrEmpty(name))
-				throw new ArgumentNullException("name");
+			var name = context.Name;
+			var scope = context.Scope;
 
-			if(items == null)
-				return 0;
+			IEnumerable<DataDictionary> items;
+
+			if(context.IsMultiple)
+				items = (IEnumerable<DataDictionary>)context.Data;
+			else
+				items = new DataDictionary[] { (DataDictionary)context.Data };
 
 			var info = MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 			if(info == null)
@@ -627,6 +650,7 @@ namespace Automao.Data
 			var insertformat = "INSERT INTO {0}({1}) VALUES({2})";
 			var columnformat = "{0}";
 			var tableName = CreateClassInfo("", info).GetTableName();
+
 			foreach(var item in items)
 			{
 				if(item == null)
@@ -676,15 +700,23 @@ namespace Automao.Data
 				transaction.Commit();
 			}
 
-			return insertCount;
+			context.Count = insertCount;
 		}
 		#endregion
 
 		#region 修改
-		protected override int OnUpdateMany(string name, IEnumerable<DataDictionary> items, ICondition condition, string scope)
+		protected override void OnUpdate(DataUpdationContext context)
 		{
-			if(string.IsNullOrEmpty(name))
-				throw new ArgumentNullException("name");
+			var name = context.Name;
+			var condition = context.Condition;
+			var scope = context.Scope;
+
+			IEnumerable<DataDictionary> items;
+
+			if(context.IsMultiple)
+				items = (IEnumerable<DataDictionary>)context.Data;
+			else
+				items = new DataDictionary[] { (DataDictionary)context.Data };
 
 			var info = MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 			if(info == null)
@@ -704,6 +736,7 @@ namespace Automao.Data
 			int joinStartIndex = 0;
 			int valueIndex = 0;
 			string wheresql = string.Empty;
+
 			if(condition != null)
 			{
 				var columns = GetConditionName(condition);
@@ -740,7 +773,6 @@ namespace Automao.Data
 
 					wheresql = newCondition.ToWhere(columnInfos, ref tableIndex, ref joinStartIndex, ref tempValueIndex, out whereValues);
 				}
-
 
 				var temp = dic.Where(p => p.Value != null && !(p.Value is System.Linq.Expressions.Expression));
 				var list = temp.Select((p, i) => string.Format(setFormat, CreateColumnInfo(p.Key.Field).ToColumn(), i + tempValueIndex)).ToList();
@@ -784,15 +816,15 @@ namespace Automao.Data
 				transaction.Commit();
 			}
 
-			return updateCount;
+			context.Count = updateCount;
 		}
 		#endregion
 
 		#region 是否存在
-		protected override bool OnExists(string name, ICondition condition)
+		protected override void OnExists(DataExistenceContext context)
 		{
-			if(string.IsNullOrEmpty(name))
-				throw new ArgumentNullException("name");
+			var name = context.Name;
+			var condition = context.Condition;
 
 			var info = this.MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.CurrentCultureIgnoreCase));
 			if(info == null)
@@ -823,23 +855,22 @@ namespace Automao.Data
 					tempJoinInfos.AddRange(columnInfo.Join.GetParent(p => tempJoinInfos.Contains(p)));
 				}
 			}
+
 			var joinsql = string.Join(" ", tempJoinInfos.OrderBy(p => p.Target.AsIndex).Select(p => p.ToJoinSql(CreateColumnInfo)));
 
 			var sql = string.Format("SELECT 0 FROM {0} {1} {2} LIMIT 0,1", classInfo.GetTableName(), joinsql, whereSql);
 
 			var result = Executer.ExecuteScalar(sql, CreateParameters(0, values));
-			return result != null;
+			context.Result = (result != null);
 		}
 		#endregion
 
-		protected override long OnIncrement(string name, string member, ICondition condition, int interval = 1)
+		protected override void OnIncrement(DataIncrementContext context)
 		{
-			if(string.IsNullOrWhiteSpace(name))
-				throw new ArgumentNullException("name");
-			if(string.IsNullOrWhiteSpace(member))
-				throw new ArgumentNullException("member");
-			if(condition == null)
-				throw new ArgumentNullException("condition");
+			var name = context.Name;
+			var member = context.Member;
+			var condition = context.Condition;
+			var interval = context.Interval;
 
 			var info = MappingInfo.ClassNodeList.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 			if(info == null)
@@ -863,18 +894,18 @@ namespace Automao.Data
 			var sql = string.Format("UPDATE {0} SET {1}={1}+({2}) {3}",
 									tableName, columnInfo.ToColumn(), interval, wheresql);
 
+			context.Result = -1;
+
 			using(var transaction = new Zongsoft.Transactions.Transaction())
 			{
 				if(this.Executer.Execute(sql, paramers) > 0)
 				{
 					sql = string.Format("SELECT {0} FROM {1} {2}", columnInfo.ToColumn(), tableName, wheresql);
-					return Zongsoft.Common.Convert.ConvertValue<long>(this.Executer.ExecuteScalar(sql, paramers));
+					context.Result = Zongsoft.Common.Convert.ConvertValue<long>(this.Executer.ExecuteScalar(sql, paramers));
 				}
 
 				transaction.Commit();
 			}
-
-			return -1;
 		}
 
 		protected virtual Type GetEntityType(string name)
