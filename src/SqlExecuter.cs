@@ -269,13 +269,6 @@ namespace Automao.Data
 
 				using(var reader = command.ExecuteReader(CommandBehavior.CloseConnection))
 				{
-					outParamers = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-					foreach(DbParameter item in command.Parameters)
-					{
-						if(item.Direction == ParameterDirection.Output || item.Direction == ParameterDirection.InputOutput)
-							outParamers.Add(item.ParameterName, item.Value);
-					}
-
 					while(reader.Read())
 					{
 						var dic = new Dictionary<string, object>();
@@ -286,6 +279,14 @@ namespace Automao.Data
 						}
 
 						result.Add(dic);
+					}
+
+					outParamers = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+					foreach(DbParameter item in command.Parameters)
+					{
+						if(item.Direction == ParameterDirection.Output || item.Direction == ParameterDirection.InputOutput)
+							outParamers.Add(item.ParameterName, item.Value);
 					}
 				}
 			}
