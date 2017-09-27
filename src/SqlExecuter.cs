@@ -280,14 +280,14 @@ namespace Automao.Data
 
 						result.Add(dic);
 					}
+				}
 
-					outParamers = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+				outParamers = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
-					foreach(DbParameter item in command.Parameters)
-					{
-						if(item.Direction == ParameterDirection.Output || item.Direction == ParameterDirection.InputOutput)
-							outParamers.Add(item.ParameterName, item.Value);
-					}
+				foreach(DbParameter item in command.Parameters)
+				{
+					if(item.Direction == ParameterDirection.Output || item.Direction == ParameterDirection.InputOutput)
+						outParamers.Add(item.ParameterName, item.Value);
 				}
 			}
 			catch(global::MySql.Data.MySqlClient.MySqlException ex)
