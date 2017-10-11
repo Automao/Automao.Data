@@ -165,7 +165,7 @@ namespace Automao.Data
 
 			if(grouping != null)
 			{
-				allColumns = allColumns.Concat(grouping.Members);
+				allColumns = allColumns.Concat(grouping.Keys.Select(p => p.Name));
 				if(grouping.Condition != null)
 					allColumns = allColumns.Concat(GetConditionName(grouping.Condition));
 				if(!members.Any(p => p.StartsWith("count(", StringComparison.OrdinalIgnoreCase)))
@@ -230,9 +230,9 @@ namespace Automao.Data
 			});
 
 			#region 要查询的列
-			var selectMembers = parameter.Members.Where(p => parameter.Grouping == null || p.Contains('(') && !parameter.Grouping.Members.Contains(p));
+			var selectMembers = parameter.Members.Where(p => parameter.Grouping == null || p.Contains('(') && !parameter.Grouping.Keys.Any(m => string.Equals(m.Name, p, StringComparison.OrdinalIgnoreCase)));
 			if(parameter.Grouping != null)
-				selectMembers = selectMembers.Concat(parameter.Grouping.Members);
+				selectMembers = selectMembers.Concat(parameter.Grouping.Keys.Select(p => p.Name));
 
 			var columns = selectMembers.Select(p => parameter.AllColumnInfos[p]).Where(predicate).ToList();
 			#endregion
@@ -273,10 +273,10 @@ namespace Automao.Data
 			var newHostAsName = parameter.ClassInfo.As + (parameter.ClassInfo.AsIndex + 1);
 			if(parameter.Grouping != null)
 			{
-				var groupColumnInfos = parameter.Grouping.Members.Select(p => parameter.AllColumnInfos[p]).ToArray();
+				var groupColumnInfos = parameter.Grouping.Keys.Select(p => parameter.AllColumnInfos[p.Name]).ToArray();
 				group = string.Format("GROUP BY {0}", string.Join(",", groupColumnInfos.Select(p => p.ToColumn())));
 
-				var groupedSelectMembers = parameter.Members.Where(p => !p.Contains('(') && !parameter.Grouping.Members.Contains(p));
+				var groupedSelectMembers = parameter.Members.Where(p => !p.Contains('(') && !parameter.Grouping.Keys.Any(m => string.Equals(m.Name, p, StringComparison.OrdinalIgnoreCase)));
 				groupedSelectColumns = groupedSelectMembers.Select(p => parameter.AllColumnInfos[p]).Where(predicate).ToList();
 
 				tempJoinInfos = new List<Join>();
