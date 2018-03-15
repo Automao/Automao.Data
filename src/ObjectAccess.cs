@@ -1064,7 +1064,7 @@ namespace Automao.Data
 
 			object entity;
 
-			if(instanceArgs == null || instanceArgs.Length == 0)
+			if(entityType.IsValueType || instanceArgs == null || instanceArgs.Length == 0)
 				entity = System.Activator.CreateInstance(entityType);
 			else
 				entity = System.Activator.CreateInstance(entityType, instanceArgs);
