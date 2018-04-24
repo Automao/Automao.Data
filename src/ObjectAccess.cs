@@ -333,7 +333,7 @@ namespace Automao.Data
 
 			if(parameter.Sortings != null && parameter.Sortings.Length > 0)
 			{
-				orderby = "ORDER BY {0}" + string.Join(",", parameter.Sortings.Select(p => p.Parse(parameter.AllColumnInfos)));
+				orderby = "ORDER BY " + string.Join(",", parameter.Sortings.Select(p => p.Parse(parameter.AllColumnInfos)));
 			}
 
 			if(parameter.Paging != null && parameter.Paging.TotalCount == 0)
