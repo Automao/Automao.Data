@@ -145,7 +145,7 @@ namespace Automao.Data
 			var grouping = context.Grouping;
 			var scope = context.Scope;
 			var paging = context.Paging;
-			var sorting = context.Sortings;
+			var sortings = context.Sortings;
 
 			var members = this.ResolveScope(name, scope, context.EntityType);
 
@@ -161,26 +161,28 @@ namespace Automao.Data
 			var allColumnInfos = new Dictionary<string, ColumnInfo>();
 
 			var conditionNames = GetConditionName(condition) ?? new string[0];
-			IEnumerable<string> allColumns = conditionNames;
+			var allColumns = new List<string>(conditionNames);
 
 			if(grouping != null)
 			{
-				allColumns = allColumns.Concat(grouping.Keys.Select(p => p.Name));
-				if(grouping.Condition != null)
-					allColumns = allColumns.Concat(GetConditionName(grouping.Condition));
+				allColumns.AddRange(grouping.Keys.Select(p => p.Name));
+
+				if(grouping.Filter != null)
+					allColumns.AddRange(GetConditionName(grouping.Filter));
+
 				if(!members.Any(p => p.StartsWith("count(", StringComparison.OrdinalIgnoreCase)))
 					members = members.Concat(new[] { "COUNT(0)" }).ToArray();
 			}
 
-			if(sorting != null)
+			if(sortings != null && sortings.Length > 0)
 			{
-				foreach(var item in sorting)
+				foreach(var item in sortings)
 				{
-					allColumns = allColumns.Concat(item.Members);
+					allColumns.Add(item.Name);
 				}
 			}
 
-			allColumns = allColumns.Concat(members);
+			allColumns.AddRange(members);
 			allColumnInfos = CreateColumnInfo(allColumns, classInfo);
 
 			context.Result = new ObjectAccessResult<T>(p =>
@@ -196,7 +198,7 @@ namespace Automao.Data
 				parameter.AllColumnInfos = allColumnInfos;
 				parameter.Paging = paging;
 				parameter.Grouping = grouping;
-				parameter.Sorting = sorting;
+				parameter.Sortings = sortings;
 				parameter.ConditionOperator = p.ConditionOperator;
 				return CreateSelectSql(parameter);
 			}, p =>
@@ -248,8 +250,8 @@ namespace Automao.Data
 			#region join
 			var tempJoinInfos = new List<Join>();
 			var tempColumns = parameter.ConditionNames.Concat(selectMembers);
-			if(parameter.Grouping != null && parameter.Grouping.Condition != null)
-				tempColumns = tempColumns.Concat(GetConditionName(parameter.Grouping.Condition));
+			if(parameter.Grouping != null && parameter.Grouping.Filter != null)
+				tempColumns = tempColumns.Concat(GetConditionName(parameter.Grouping.Filter));
 			foreach(var item in tempColumns.ToArray())
 			{
 				var columnInfo = parameter.AllColumnInfos[item];
@@ -315,19 +317,24 @@ namespace Automao.Data
 					return p.ToJoinSql(CreateColumnInfo);
 				}));
 
-				if(parameter.Grouping.Condition != null)
+				if(parameter.Grouping.Filter != null)
 				{
 					object[] tempValues;
 					ti = parameter.TableIndex;
 					ji = parameter.JoinStartIndex;
 					vi = parameter.ValueIndex;
-					having = parameter.Grouping.Condition.ToWhere(parameter.AllColumnInfos, ref ti, ref ji, ref vi, out tempValues, "HAVING {0}");
+					having = parameter.Grouping.Filter.ToWhere(parameter.AllColumnInfos, ref ti, ref ji, ref vi, out tempValues, "HAVING {0}");
 					values = values.Concat(tempValues).ToArray();
 				}
 			}
 			#endregion
 
-			var orderby = parameter.Sorting == null || parameter.Sorting.Length == 0 ? "" : string.Format("ORDER BY {0}", string.Join(",", parameter.Sorting.Select(p => p.Parse(parameter.AllColumnInfos))));
+			var orderby = string.Empty;
+
+			if(parameter.Sortings != null && parameter.Sortings.Length > 0)
+			{
+				orderby = "ORDER BY {0}" + string.Join(",", parameter.Sortings.Select(p => p.Parse(parameter.AllColumnInfos)));
+			}
 
 			if(parameter.Paging != null && parameter.Paging.TotalCount == 0)
 			{

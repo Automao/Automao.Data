@@ -28,8 +28,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using Automao.Data.Mapping;
+
 using Zongsoft.Data;
 
 namespace Automao.Data
@@ -178,47 +177,22 @@ namespace Automao.Data
 			}
 		}
 
-		private static string Parse(this SortingMode sortingMode)
-		{
-			switch(sortingMode)
-			{
-				case SortingMode.Ascending:
-					return "ASC";
-				case SortingMode.Descending:
-					return "DESC";
-				default:
-					throw new ArgumentOutOfRangeException(string.Format("未存在当前枚举值:{0}", sortingMode));
-			}
-		}
-
-		public static string Parse(this Sorting sorting, ClassNode info, string tableEx)
-		{
-			if(!string.IsNullOrEmpty(tableEx))
-				tableEx += ".";
-
-			var sort = sorting.Mode.Parse();
-			return string.Join(",", sorting.Members.Select(p =>
-			{
-				var pi = info.PropertyNodeList.FirstOrDefault(i => i.Name == p);
-				return string.Format("{0}\"{1}\" {2}", tableEx, pi == null ? p : pi.Field, sort);
-			}));
-		}
-
 		internal static string Parse(this Sorting sorting, Dictionary<string, ColumnInfo> columnInfos)
 		{
-			var sort = sorting.Mode.Parse();
-			var format = "{0} {1}";
+			if(!columnInfos.ContainsKey(sorting.Name))
+				throw new Exception(string.Format("未找到属性\"{0}\"的描述信息", sorting.Name));
 
-			return string.Join(",", sorting.Members.Select(p =>
+			var columnInfo = columnInfos[sorting.Name];
+
+			switch(sorting.Mode)
 			{
-
-				if(!columnInfos.ContainsKey(p))
-					throw new Exception(string.Format("未找到属性\"{0}\"的描述信息", p));
-
-				var columnInfo = columnInfos[p];
-
-				return string.Format(format, columnInfo.ToColumn(), sort);
-			}));
+				case SortingMode.Ascending:
+					return columnInfo.ToColumn() + " ASC";
+				case SortingMode.Descending:
+					return columnInfo.ToColumn() + " DESC";
+				default:
+					return columnInfo.ToColumn();
+			}
 		}
 
 		private static object[] GetValue(Condition where)

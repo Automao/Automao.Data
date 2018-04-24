@@ -62,7 +62,7 @@ namespace Automao.Data
 			set;
 		}
 
-		public Sorting[] Sorting
+		public Sorting[] Sortings
 		{
 			get;
 			set;
